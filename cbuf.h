@@ -164,10 +164,12 @@ Z_INL_FORCE uint64_t cbuf_sz_p(cbuf_t *b)
 }
 Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bitshift_; }
 
+/* create/free */
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
 void	cbuf_free(cbuf_t *buf);
 
+/* reserve */
 void	*cbuf_snd_res(cbuf_t *buf);
 uint32_t cbuf_snd_res_m(cbuf_t *buf, size_t cnt);
 uint32_t cbuf_snd_res_m_cap(cbuf_t *buf, size_t *res_cnt); 
@@ -175,15 +177,22 @@ void	*cbuf_rcv_res(cbuf_t *buf);
 uint32_t cbuf_rcv_res_m(cbuf_t *buf, size_t cnt);
 uint32_t cbuf_rcv_res_m_cap(cbuf_t *buf, size_t *res_cnt);
 
+/* release */
 void cbuf_snd_rls(cbuf_t *buf);
 void cbuf_snd_rls_m(cbuf_t *buf, size_t cnt);
 void cbuf_rcv_rls(cbuf_t *buf);
 void cbuf_rcv_rls_m(cbuf_t *buf, size_t cnt);
-void cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt);
 
+/* sophisticated buffer tricks */
+void		cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt);
+uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
+
+/* checkpoint */
 uint64_t	cbuf_checkpoint_snapshot(cbuf_t *b);
 int		cbuf_checkpoint_verif(cbuf_t *b, uint64_t checkpoint);
 
+/* splice */
+size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i);
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size);
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write);
 
@@ -208,7 +217,7 @@ We return an offset value from the base address of `buf->buf`, pointing to the
 	space immediately following `*head`. 
 Returned offset value is suitable for use with splice() memcpy(), etc.
 	*/
-Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, ssize_t **head)
+Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **head)
 {
 	start_pos += n << buf->sz_bitshift_;
 	loff_t ret = (start_pos & buf->overflow_);

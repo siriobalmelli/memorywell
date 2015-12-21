@@ -3,7 +3,14 @@
 #ifdef Z_BLK_LVL
 #undef Z_BLK_LVL
 #endif
-#define Z_BLK_LVL 1
+#define Z_BLK_LVL 0
+/*	debug levels:
+	1:	
+	2:	
+	3:	checkpoints
+	4:
+	5:	
+*/
 
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 {
@@ -220,6 +227,31 @@ void cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt)
 			&buf->sz_unused);
 }
 
+/*	cbuf_rcv_held()
+
+Get `pos` and `i` for ALL blocks currently reserved or uncommitted
+	on the receiver side.
+
+NOTE: this is NOT thread-safe - NO receive-side blocks must be alloc'ed or
+	released while this is run.
+This is ONLY safe to run when receiver is a single thread.
+
+return: same semantics as reservation calls: -1 is bad.
+	*/
+uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt)
+{
+	if (!out_cnt)
+		return -1;
+
+	/* get a count of how many blocks are reserved or uncommitted */
+	*out_cnt = (buf->rcv_reserved + buf->rcv_uncommit) >> buf->sz_bitshift_;
+
+	/* return actual receiver */
+	uint64_t snd_pos;
+	uint64_t sz_unused;
+	return cbuf_actual_receiver__(buf, &snd_pos, &sz_unused) & buf->overflow_;
+}
+
 /*	cbuf_checkpoint_snapshot()
 
 Take a "snapshot" of the current sender position IN RELATION TO the "actual receiver".
@@ -240,12 +272,19 @@ RETURNS: a uint64_t which can be fed to `cbuf_checkpoint_verif()` later.
 	*/
 uint64_t	cbuf_checkpoint_snapshot(cbuf_t *b)
 {
-	/*  save values at a single point in time */
-	uint64_t ret = b->snd_pos;
-	/* If sender is smaller than "actual receiver", it actually rolled over.
-		Add a full buffer size to it */
-	if (ret < ((ret + (uint64_t)b->sz_unused) & b->overflow_))
+	/*  get a clean snapshot of variables */
+	uint64_t ret;
+	uint64_t sz_unused;
+	uint64_t actual_rcv = cbuf_actual_receiver__(b, &ret, &sz_unused);
+
+	/* If sender is smaller than "actual receiver", it actually rolled over:
+		add a full buffer size to it.
+	NOTE: snd_pos + unused == "actual receiver".
+		*/
+	if (ret < actual_rcv)
 		ret += b->overflow_ +1;
+	Z_inf(3, "snapshot. snd_pos(unrolled) %ld, 'actual receiver' %ld",
+		ret, actual_rcv);
 	return ret;
 }
 
@@ -261,74 +300,107 @@ int cbuf_checkpoint_verif(cbuf_t *b, uint64_t checkpoint)
 {
 	/* "actual receiver" is the concept of 
 		"what does the receiver NO LONGER CARE ABOUT."
-	This is also: `rcv_pos - (rcv_reserved + rcv_uncommit)`
-		... but avoiding subtraction which is messy to roll over "before 0".
+	This is : `rcv_pos - (rcv_reserved + rcv_uncommit)`
+		... but subtraction is messy to roll over "before 0",
+		so we use the equivalent `snd_pos + unused`
+	When "actual receiver" has surpassed the snd_pos at time of snapshot,
+		all data which was queued for receiver at the time is
+		guaranteed to have been released by receiver.
 		*/
-	uint64_t actual_rcv = (b->snd_pos + b->sz_unused); /* notice we don't mask to overflow */
-	/* if this rolled over, add a full buffer size to it */
+	uint64_t actual_rcv = ((uint64_t)b->snd_pos + b->sz_unused); /* notice we don't mask to overflow */
+	Z_inf(3, "checkpoint: %ld vs 'actual receiver' %ld", checkpoint, actual_rcv);
 	return actual_rcv >= checkpoint;
+}
+
+/*	cbuf_splice_sz()
+
+Returns the SIZE OF SPLICED DATA represented by a cbuf block, 
+	whether the data is in the cbuf itself 
+	or whether it is in a backing store and only tracked by the cbuf block.
+	*/
+size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i)
+{
+	/* get base of block being pointed to */
+	void *base = cbuf_offt(b, pos, i);
+
+	/* if this cbuf has a backing store, block is a tracking stuct.
+		Typecast and dereference.
+		*/
+	if (b->cbuf_flags & CBUF_P)
+		return ((cbufp_t *)base)->data_len;
+
+	/* Otherwise, data length is in the first 8B of the block itself.
+		Typecast and dereference.
+		*/
+	return *((size_t *)base);
 }
 
 /*	cbuf_splice_from_pipe()
 Pulls at most `size` bytes from `a_pipe[0]` into the cbuf block at `pos`, offset `i`.
+
+In the case that cbuf has a backing store (the block only contains a cbufp_t):
+	The amount of bytes to push is limited to 'blk_iov.iov_len'.
+	The amount of bytes actually pushed is stored in the 'data_len' variable.
+	data_len is returned but is never less than 0.
 
 In the case of a regular cbuf:
 	The amount of bytes actually pushed is written in the first 8B of 
 		the cbuf block itself, aka `cbuf_head`.
 	`cbuf_head` may be 0 but will be AT MOST the size of cbuf block (minus 8B).
 	Returns `cbuf_head` - which on error will be 0, NOT -1(!).
-
-In the case that cbuf has a backing store (the block only contains a cbufp_t):
-	The amount of bytes to push is limited to 'blk_iov.iov_len'.
-	The amount of bytes actually pushed is stored in the 'data_len' variable.
-	data_len is returned but is never less than 0.
 	*/
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size)
 {
+	if (!size)
+		return 0;
+
+	size_t *cbuf_head;
+	loff_t temp_offset;
+	int fd;
+
+	/* splice params: backing store */
 	if (b->cbuf_flags & CBUF_P) {
 		cbufp_t *f = cbuf_offt(b, pos, i);
+
 		/* sanity */
 		if (size > f->blk_iov.iov_len){
 			Z_err("size %d larger than iov_len %d", (int)size, (int)f->blk_iov.iov_len);
 			size = f->blk_iov.iov_len;
 		}
 		
-		loff_t temp_offset = f->blk_offset;
-		do {
-			f->data_len = splice(fd_pipe_read, NULL, 
-				f->fd, &temp_offset, size, SPLICE_F_NONBLOCK);
-			if (f->data_len == 0){
-				Z_err("cbuf_splice_from_pipe: failed to splice with: cbuf %lx, fd_pipe_read %d, pos %d, i %d, f %lx, f->fd %d, f->blk_offset %d, size %d, errno %d",
-				      (uint64_t)b, (int)fd_pipe_read, (int) pos, (int) i, (uint64_t)f, (int)f->fd, (int)f->blk_offset, (int)size, (int)errno);
-			}
-			/* ENOMEM seems about the only "should retry this" error.
-			Everything else, we should just return "no bytes copied".
-			While we're evaluating data_len, set it to 0 to avoid another
-				branch operation immediately following.
-				*/
-		} while (f->data_len == -1 && (!(f->data_len = 0)) && errno == ENOMEM);
+		/* params */
+		temp_offset = f->blk_offset;
+		cbuf_head = &f->data_len;
+		fd = f->fd; /* fd is the backing store's fd */
 
-		return f->data_len;
+	/* params: cbuf block itself as splice destination */
 	} else {
 		/* sanity */
-		if (size > (cbuf_sz_obj(b) - sizeof(ssize_t)))
-			size = cbuf_sz_obj(b) - sizeof(ssize_t);
+		if (size > (cbuf_sz_obj(b) - sizeof(size_t)))
+			size = cbuf_sz_obj(b) - sizeof(size_t);
 
 		/* get head of buffer block, put offset from buf fd info cbuf_off */
-		ssize_t *cbuf_head;
-		loff_t cbuf_off = cbuf_lofft(b, pos, i, &cbuf_head);
-		/* Pull data from pipe fitting,  put into buffer block,
-			put transfer length at head of buffer block.
-			*/	
-		*cbuf_head = splice(fd_pipe_read, NULL, b->mmap_fd, 
-			&cbuf_off, size, SPLICE_F_NONBLOCK);
-		/* if got error, tell receiver "nothing here" */
-		if (*cbuf_head == -1) {
-			Z_err("size %ld", size);
-			*cbuf_head = 0;
-		}
-		return *cbuf_head;
+		temp_offset = cbuf_lofft(b, pos, i, &cbuf_head);
+		/* fd is the cbuf itself */
+		fd = b->mmap_fd;
 	}
+
+	/* do splice */
+	do {
+		*cbuf_head = splice(fd_pipe_read, NULL, fd, &temp_offset, 
+				size, SPLICE_F_NONBLOCK);
+	} while (*cbuf_head == 0 && errno == EWOULDBLOCK);
+	/* housekeeping */
+	if (errno == EWOULDBLOCK)
+		errno = 0;
+
+	/* if got error, reset to "nothing" */
+	if (*cbuf_head == -1)
+		*cbuf_head = 0;
+
+	/* done */
+	Z_err_if(*cbuf_head == 0, "*cbuf_head %ld; size %ld", *cbuf_head, size);
+	return *cbuf_head;
 }
 
 /*	cbuf_splice_to_pipe()
@@ -339,38 +411,50 @@ If there is an error will return 0, not -1.
 	*/
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 {
+	int fd;
+	size_t *cbuf_head;
+	loff_t temp_offset;
+
+	/* params: backing store */
 	if (b->cbuf_flags & CBUF_P) {
 		cbufp_t *f = cbuf_offt(b, pos, i);
 
-		/* do data, no copy */
-		if (!f->data_len)
-			return 0;	
+		cbuf_head = &f->data_len;
+		temp_offset = f->blk_offset;
+		fd = f->fd;
 
-		/* Pull chunk from buffer. */
-		loff_t temp_offset = f->blk_offset;
-		ssize_t temp = splice(f->fd, &temp_offset, 
-				fd_pipe_write, NULL, f->data_len, SPLICE_F_NONBLOCK);
-		if (temp == -1)
-			temp = 0;
-		return temp;
-	}else {
-		ssize_t *cbuf_head;
-		loff_t cbuf_off = cbuf_lofft(b, pos, i, &cbuf_head);
-
-		/* ALWAYS check for an opportunity to slack ;) */
-		if (!cbuf_head[0])
-			return 0;
-
-		/* Pull chunk from buffer.
-			Could return -1 if dest. pipe is full.
-			Have pipe empty before running this, then evacuate pipe.
-			*/
-		ssize_t temp = splice(b->mmap_fd, &cbuf_off, 
-				fd_pipe_write, NULL, *cbuf_head, SPLICE_F_NONBLOCK);
-		if (temp == -1)
-			temp = 0;
-		return temp;
+	/* params: cbuf block itself contains data */
+	} else {
+		/* get offset and head */
+		temp_offset = cbuf_lofft(b, pos, i, &cbuf_head);
+		/* fd is cbuf itself */
+		fd = b->mmap_fd;
 	}
+
+	/* no data, no copy */
+	if (*cbuf_head == 0)
+		return 0;
+	/* Pull chunk from buffer.
+		Could return -1 if dest. pipe is full.
+		Have pipe empty before running this, then evacuate pipe.
+		*/
+	ssize_t temp;
+	do {
+		temp = splice(fd, &temp_offset, fd_pipe_write, 
+				NULL, *cbuf_head, SPLICE_F_NONBLOCK);
+	} while (!temp && errno == EWOULDBLOCK);
+	/* housekeeping */
+	if (errno == EWOULDBLOCK)
+		errno = 0;
+
+	/* haz error? */
+	if (temp == -1) {
+		temp = 0;
+	}
+
+	/* return */
+	Z_err_if(temp != *cbuf_head, "temp %ld; *cbuf_head %ld", temp, *cbuf_head);
+	return temp;
 }
 
 #undef Z_BLK_LVL

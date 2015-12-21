@@ -98,7 +98,7 @@ int test_splice_integrity()
 	check = cbuf_splice_to_pipe(b, pos, 0, b->plumbing[1]);
 	Z_die_if(check != i_size, "splice: cbuf -> pipe");
 	/* get a handle on cbuf memory so we can check it's contents directly */
-	ssize_t *head;
+	size_t *head;
 	uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &head);
 	cbuf_rcv_rls(b); /* don't HAVE to release, we won't use cbuf again */
 

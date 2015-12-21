@@ -27,6 +27,7 @@ void *snd_thread(void *args);
 void *rcv_thread(void *args);
 
 uint64_t global_sum = 0;
+uint64_t expected_sum = 0;
 
 int main()
 {
@@ -148,7 +149,7 @@ int test_cbuf_threaded()
 			@8 : (8-1)*0.5				= 3.5
 			@8 : 0+1+2+3+4+5+6+7 = (8-1)*0.5*8 = 28
 	*/
-	uint64_t expected_sum = (NUMITER -1) * 0.5 * NUMITER * THREAD_CNT;
+	uint64_t final_verif = (NUMITER -1) * 0.5 * NUMITER * THREAD_CNT;
 
 	/* circ buf */
 	cbuf_t *buf = cbuf_create(OBJ_SZ, OBJ_CNT);
@@ -183,6 +184,8 @@ int test_cbuf_threaded()
 	/* verify integrity of data */
 	Z_die_if(global_sum != expected_sum, "global_sum %ld != expected_sum %ld",
 			global_sum, expected_sum);
+	Z_die_if(expected_sum != final_verif, "expected_sum %ld != final_verif %ld",
+			expected_sum, final_verif);
 
 out:
 	if (buf)
@@ -265,6 +268,9 @@ retry:
 				s = cbuf_offt(b, pos, j);
 				s->i = i+j; /* this will be used for
 						 'data integrity' check */
+
+				/* ... and it will be checked against this: */
+				__atomic_add_fetch(&expected_sum, s->i, __ATOMIC_SEQ_CST);
 			}
 			cbuf_snd_rls_m(b, step_sz);
 		}
