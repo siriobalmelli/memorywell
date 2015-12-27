@@ -389,17 +389,18 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 	do {
 		*cbuf_head = splice(fd_pipe_read, NULL, fd, &temp_offset, 
 				size, SPLICE_F_NONBLOCK);
-	} while (*cbuf_head == 0 && errno == EWOULDBLOCK);
-	/* housekeeping */
-	if (errno == EWOULDBLOCK)
-		errno = 0;
+	} while ((*cbuf_head == 0 || *cbuf_head == -1) && errno == EWOULDBLOCK 
+		/* the below are tested/executed only if we would block: */ 
+		&& !CBUF_YIELD() /* don't spinlock */
+		&& !(errno = 0)); /* resets errno ONLY if we will retry */
+	
 
 	/* if got error, reset to "nothing" */
 	if (*cbuf_head == -1)
 		*cbuf_head = 0;
+	Z_err_if(*cbuf_head == 0, "*cbuf_head %ld; size %ld", *cbuf_head, size);
 
 	/* done */
-	//Z_err_if(*cbuf_head == 0, "*cbuf_head %ld; size %ld", *cbuf_head, size);
 	return *cbuf_head;
 }
 
@@ -442,18 +443,17 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 	do {
 		temp = splice(fd, &temp_offset, fd_pipe_write, 
 				NULL, *cbuf_head, SPLICE_F_NONBLOCK);
-	} while (!temp && errno == EWOULDBLOCK);
-	/* housekeeping */
-	if (errno == EWOULDBLOCK)
-		errno = 0;
+	} while ((temp == 0 || temp == -1) && errno == EWOULDBLOCK 
+		/* the below are tested/executed only if we would block: */ 
+		&& !CBUF_YIELD() /* don't spinlock */
+		&& !(errno = 0)); /* resets errno ONLY if we will retry */
 
 	/* haz error? */
-	if (temp == -1) {
+	if (temp == -1)
 		temp = 0;
-	}
+	Z_err_if(temp != *cbuf_head, "temp %ld; *cbuf_head %ld", temp, *cbuf_head);
 
 	/* return */
-	//Z_err_if(temp != *cbuf_head, "temp %ld; *cbuf_head %ld", temp, *cbuf_head);
 	return temp;
 }
 
