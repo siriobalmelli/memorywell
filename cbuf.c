@@ -406,7 +406,7 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 
 /*	cbuf_splice_to_pipe()
 Reads `cbuf_head` (see `cbuf_splice_from_pipe()` above) @(pos +i).
-Splices `*cbuf_head` byted from the cbuf into `fd_pipe_write`.
+Splices `*cbuf_head` bytes from the cbuf into `fd_pipe_write`.
 `fd_pipe_write` MUST be a pipe, not a file or mmap'ed region.
 If there is an error will return 0, not -1.
 	*/
