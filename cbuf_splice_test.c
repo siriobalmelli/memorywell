@@ -241,7 +241,7 @@ void *splice_tx(void *args)
 			cbuf_snd_rls_m(b, step_sz);
 		}
 	}
-	uint64_t checkpoint = cbuf_checkpoint_snapshot(b);
+	cbuf_chk_t *checkpoint = cbuf_checkpoint_snapshot(b);
 	i = 0;
 	while (!cbuf_checkpoint_verif(b, checkpoint)) {
 		i++;

@@ -233,6 +233,8 @@ Takes an atomic snapshot of snd_pos and sz_unused to get "actual receiver".
 For more details on the concept of "actual receiver", see comments above 
 	`cbuf_checkpoint_snapshot`.
 Does not mask the value before returning. Not all callers find this desirable.
+
+TODO: this needs to go away
 	*/
 uint64_t cbuf_actual_receiver__(cbuf_t *buf,
 			uint64_t	*snd_pos,
@@ -250,6 +252,42 @@ uint64_t cbuf_actual_receiver__(cbuf_t *buf,
 				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
 
 	return *snd_pos + *sz_unused;
+}
+
+/*	cbuf_actuals__()
+
+TODO: document this
+	*/
+void	cbuf_actuals__(cbuf_t *buf, int64_t *act_snd, int64_t *act_rcv)
+{
+	cbuf_t snap;
+
+	/* iterate until we have a clean snap of variables
+	TODO: easier way to do an atomic memcpy?
+		*/
+	do {
+		memcpy(&snap, buf, sizeof(cbuf_t));
+	} while(
+		!__atomic_compare_exchange_n(&buf->snd_pos, &snap.snd_pos, snap.snd_pos,
+				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+		|| !__atomic_compare_exchange_n(&buf->snd_reserved, &snap.snd_reserved, snap.snd_reserved,
+				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+		|| !__atomic_compare_exchange_n(&buf->snd_uncommit, &snap.snd_uncommit, snap.snd_uncommit,
+				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+
+		|| !__atomic_compare_exchange_n(&buf->rcv_pos, &snap.rcv_pos, snap.rcv_pos,
+				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+		|| !__atomic_compare_exchange_n(&buf->rcv_reserved, &snap.rcv_reserved, snap.rcv_reserved,
+				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+		|| !__atomic_compare_exchange_n(&buf->rcv_uncommit, &snap.rcv_uncommit, snap.rcv_uncommit,
+				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+	);
+
+	/* output "actual sender" and "actual receiver" */
+	if (act_snd)
+		*act_snd = snap.snd_pos - snap.snd_reserved - snap.snd_uncommit;
+	if (act_rcv)
+		*act_rcv = snap.rcv_pos - snap.rcv_reserved - snap.rcv_uncommit;
 }
 
 #undef Z_BLK_LVL

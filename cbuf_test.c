@@ -276,7 +276,7 @@ retry:
 		}
 	}
 	//Z_inf(0, "tx: sent %d datums", i);
-	uint64_t checkpoint = cbuf_checkpoint_snapshot(b);
+	cbuf_chk_t *checkpoint = cbuf_checkpoint_snapshot(b);
 	i = 0;
 	while (!cbuf_checkpoint_verif(b, checkpoint)) {
 		i++;

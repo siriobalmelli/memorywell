@@ -156,6 +156,11 @@ typedef struct {
 	size_t		data_len;
 } cbufp_t;
 
+typedef struct {
+	int64_t		diff;
+	int64_t		actual_rcv;
+} cbuf_chk_t;
+
 /* compute some basic values out of a cbuf struct */
 Z_INL_FORCE uint32_t cbuf_sz_buf(cbuf_t *b) { return b->overflow_ + 1; }
 Z_INL_FORCE uint32_t cbuf_sz_obj(cbuf_t *b) { return 1 << b->sz_bitshift_; }
@@ -191,8 +196,10 @@ void		cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt);
 uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
 
 /* checkpoint */
-uint64_t	cbuf_checkpoint_snapshot(cbuf_t *b);
-int		cbuf_checkpoint_verif(cbuf_t *b, uint64_t checkpoint);
+//uint64_t	cbuf_checkpoint_snapshot(cbuf_t *b);
+cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b);
+//int		cbuf_checkpoint_verif(cbuf_t *b, uint64_t checkpoint);
+int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint);
 
 /* splice */
 size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i);

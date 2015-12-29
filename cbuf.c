@@ -270,6 +270,7 @@ The concept is that once "actual receiver" moves PAST the "snapshot" of
 
 RETURNS: a uint64_t which can be fed to `cbuf_checkpoint_verif()` later.
 	*/
+# if 0
 uint64_t	cbuf_checkpoint_snapshot(cbuf_t *b)
 {
 	/*  get a clean snapshot of variables */
@@ -287,6 +288,27 @@ uint64_t	cbuf_checkpoint_snapshot(cbuf_t *b)
 		ret, actual_rcv);
 	return ret;
 }
+#endif
+cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b)
+{
+	/* obviates the memory leak from function exiting for some other reason
+		before it is done with checkpoint_verif() step.
+		*/
+	static __thread cbuf_chk_t ret;
+
+	int64_t actual_snd;
+	cbuf_actuals__(b, &actual_snd, &ret.actual_rcv);
+	ret.diff = actual_snd - ret.actual_rcv;
+
+	return &ret;
+}
+
+int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint)
+{
+	int64_t actual_rcv;
+	cbuf_actuals__(b, NULL, &actual_rcv);
+	return (actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff;
+}
 
 /*	cbuf_checkpoint_verif()
 
@@ -296,6 +318,7 @@ Verifies state of the current cbuf at `b` against a checkpoint previously
 RETURNS 1 if all data through `snd_pos` at the time snapshot was taken 
 	has been consumed by receiver.
 	*/
+#if 0
 int cbuf_checkpoint_verif(cbuf_t *b, uint64_t checkpoint)
 {
 	/* "actual receiver" is the concept of 
@@ -311,6 +334,7 @@ int cbuf_checkpoint_verif(cbuf_t *b, uint64_t checkpoint)
 	Z_inf(3, "checkpoint: %ld vs 'actual receiver' %ld", checkpoint, actual_rcv);
 	return actual_rcv >= checkpoint;
 }
+#endif
 
 /*	cbuf_splice_sz()
 
