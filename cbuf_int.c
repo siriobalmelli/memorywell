@@ -235,7 +235,7 @@ Take an atomic snapshot of a cbuf.
 Pass "actual sender" and "actual receiver" variables to caller if
 	given pointers.
 	*/
-void	cbuf_actuals__(cbuf_t *buf, int64_t *act_snd, int64_t *act_rcv)
+void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv)
 {
 	cbuf_t snap;
 
@@ -267,9 +267,11 @@ void	cbuf_actuals__(cbuf_t *buf, int64_t *act_snd, int64_t *act_rcv)
 
 	/* output "actual sender" and "actual receiver" */
 	if (act_snd)
-		*act_snd = snap.snd_pos - snap.snd_reserved - snap.snd_uncommit;
+		*act_snd = (snap.rcv_pos - snap.sz_ready) & snap.overflow_;
+		//*act_snd = snap.snd_pos - snap.snd_reserved - snap.snd_uncommit;
 	if (act_rcv)
-		*act_rcv = snap.rcv_pos - snap.rcv_reserved - snap.rcv_uncommit;
+		*act_rcv = (snap.snd_pos - snap.sz_unused) & snap.overflow_;
+		//*act_rcv = snap.rcv_pos - snap.rcv_reserved - snap.rcv_uncommit;
 }
 
 #undef Z_BLK_LVL

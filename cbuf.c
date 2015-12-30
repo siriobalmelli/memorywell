@@ -306,8 +306,8 @@ cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b)
 		*/
 	static __thread cbuf_chk_t ret;
 
-	// save the stack, use `diff` as a scratchpad to store "actual sender"
-	cbuf_actuals__(b, &ret.diff, &ret.actual_rcv);
+	// use `diff` as a scratchpad to store "actual sender"
+	cbuf_actuals__(b, (uint32_t *)&ret.diff, (uint32_t*)&ret.actual_rcv);
 	ret.diff = ret.diff - ret.actual_rcv;
 
 	return &ret;
@@ -323,8 +323,23 @@ RETURNS 1 if all data through `snd_pos` at the time snapshot was taken
 int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint)
 {
 	int64_t actual_rcv;
-	cbuf_actuals__(b, NULL, &actual_rcv);
+	cbuf_actuals__(b, NULL, (uint32_t *)&actual_rcv);
+
 	return (actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff;
+
+#if 0
+	/* we would return this directly ... */
+	int ret = (actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff;
+
+	/* but sometimes we STALL??? WHY?????? */
+	if (!ret && (!b->rcv_reserved && !b->rcv_uncommit)) {
+		Z_err("STALLED check: diff %ld < checkpoint %ld",
+			actual_rcv - checkpoint->actual_rcv, checkpoint->diff);
+		return 1;
+	}
+
+	return ret;
+#endif
 }
 
 /*	cbuf_splice_sz()
