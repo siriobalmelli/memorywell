@@ -103,9 +103,6 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 	b->mmap_fd = fd;
 	Z_die_if(unlink(tfile), "");
 
-	/* open pipes */
-	Z_die_if(pipe2(b->plumbing, O_NONBLOCK), "");
-
 	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d", 
 	     (uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), b->overflow_, b->sz_bitshift_);
 	return b;
@@ -144,13 +141,6 @@ void cbuf_free_(cbuf_t *buf)
 	/* open file descriptors */
 	if (buf->mmap_fd)
 		close(buf->mmap_fd);
-	if (buf->plumbing[0]) {
-		Z_err_if(close(buf->plumbing[0]), "");
-	}
-	if (buf->plumbing[1]) {
-		Z_err_if(close(buf->plumbing[1]), "");
-	}
-
 	Z_inf(3, "cbuf @0x%lx", (uint64_t)buf);
 	free(buf);
 }
@@ -246,10 +236,10 @@ void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv)
 
 	/* output "actual sender" and "actual receiver" */
 	if (act_snd)
-		*act_snd = (snap.rcv_pos - snap.sz_ready) & snap.overflow_;
+		*act_snd = (snap.rcv_pos + snap.sz_ready) & snap.overflow_;
 		//*act_snd = snap.snd_pos - snap.snd_reserved - snap.snd_uncommit;
 	if (act_rcv)
-		*act_rcv = (snap.snd_pos - snap.sz_unused) & snap.overflow_;
+		*act_rcv = (snap.snd_pos + snap.sz_unused) & snap.overflow_;
 		//*act_rcv = snap.rcv_pos - snap.rcv_reserved - snap.rcv_uncommit;
 }
 

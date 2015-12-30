@@ -138,10 +138,8 @@ typedef struct {
 	uint32_t	rcv_reserved;	/* Reserved by readers(s). */
 	uint32_t	rcv_uncommit;	/* Not committed because other readers I/P. */
 
-	int		plumbing[2];	/* Pipe for splice operations.
-					NOTE that access to plumbing is NOT safe
-					in the context of multiple senders|receivers.
-						*/
+	uint64_t	unused;		/* used to be "plumbing" TODO: put to good use? */
+#endif
 }__attribute__ ((packed))	cbuf_t;
 
 typedef struct {
@@ -196,10 +194,9 @@ void		cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt);
 uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
 
 /* checkpoint */
-//uint64_t	cbuf_checkpoint_snapshot(cbuf_t *b);
 cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b);
-//int		cbuf_checkpoint_verif(cbuf_t *b, uint64_t checkpoint);
 int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint);
+int		cbuf_checkpoint_loop(cbuf_t *buf);
 
 /* splice */
 size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i);

@@ -1,5 +1,5 @@
 #cbuf library
-add_library(cbuf SHARED cbuf.c cbuf_int.c)
+add_library(cbuf SHARED cbuf.c cbuf_checkpoint.c cbuf_splice.c cbuf_int.c)
 target_compile_options(cbuf PRIVATE -fPIC)
 
 link_libraries(
@@ -10,7 +10,6 @@ link_libraries(
 
 add_executable(cbuf_test.exe cbuf_test.c)
 add_executable(cbuf_splice_test.exe cbuf_splice_test.c)
-add_executable(test.exe test.c)
 
 add_test(NAME cbuf_test COMMAND cbuf_test.exe)
 set_tests_properties(cbuf_test

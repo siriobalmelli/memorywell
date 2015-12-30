@@ -276,12 +276,7 @@ retry:
 		}
 	}
 	//Z_inf(0, "tx: sent %d datums", i);
-	cbuf_chk_t *checkpoint = cbuf_checkpoint_snapshot(b);
-	i = 0;
-	while (!cbuf_checkpoint_verif(b, checkpoint)) {
-		i++;
-		pthread_yield();
-	}
+	i = cbuf_checkpoint_loop(b);
 	Z_inf(1, "%d iter on cbuf_checkpoint_verif", i);
 
 	mts_cleanup_thr_();

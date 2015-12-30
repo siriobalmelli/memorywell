@@ -71,8 +71,12 @@ int test_splice_integrity()
 	i_dst_data = mmap(NULL, i_size, PROT_READ | PROT_WRITE, MAP_SHARED, i_dst_fd, 0);
 	Z_die_if(i_dst_data == MAP_FAILED, "");
 	
+	/* plumbing */
+	int plumbing[2] = { 0, 0 };
+	Z_die_if(pipe(plumbing), "bad turd-herder");
+
 	/* cbuf 
-		... leave space for header at top of buf */
+		... leave space for header at head of buf */
 	Z_die_if(!(b = cbuf_create(i_size + sizeof(ssize_t), 1)), "");
 
 	/* set source */
@@ -82,20 +86,20 @@ int test_splice_integrity()
 	CHEAT: use pipe built into cbuf - just note that this
 		approach is NOT thread-safe, just convenient ;)
 		*/
-	check = splice(i_src_fd, NULL, b->plumbing[1], NULL, i_size, 0);
+	check = splice(i_src_fd, NULL, plumbing[1], NULL, i_size, 0);
 	Z_die_if(check != i_size, "splice: src -> pipe");
 
 	/* put into cbuf */
 	pos = cbuf_snd_res_m(b, 1);
 	Z_die_if(pos == -1, "snd reserve");
-	check = cbuf_splice_from_pipe(b->plumbing[0], b, pos, 0, i_size);
+	check = cbuf_splice_from_pipe(plumbing[0], b, pos, 0, i_size);
 	Z_die_if(check != i_size, "splice: pipe -> cbuf");
 	cbuf_snd_rls(b);
 
 	/* pull out of cbuf into pipe */
 	pos = cbuf_rcv_res_m(b, 1);
 	Z_die_if(pos == -1, "rcv reserve");
-	check = cbuf_splice_to_pipe(b, pos, 0, b->plumbing[1]);
+	check = cbuf_splice_to_pipe(b, pos, 0, plumbing[1]);
 	Z_die_if(check != i_size, "splice: cbuf -> pipe");
 	/* get a handle on cbuf memory so we can check it's contents directly */
 	size_t *head;
@@ -103,7 +107,7 @@ int test_splice_integrity()
 	cbuf_rcv_rls(b); /* don't HAVE to release, we won't use cbuf again */
 
 	/* write to destination file, verify data is clean */
-	splice(b->plumbing[0], NULL, i_dst_fd, NULL, i_size, 0);
+	splice(plumbing[0], NULL, i_dst_fd, NULL, i_size, 0);
 	for (i=0; i < i_size; i++)
 		Z_err_if(i_dst_data[i] != i, "%d,%d", i_dst_data[i], i);
 
@@ -137,6 +141,11 @@ out:
 		close(i_src_fd);
 	if (i_dst_fd)
 		close(i_dst_fd);
+	/* clean up plumbing */
+	if (plumbing[0])
+		close(plumbing[0]);
+	if (plumbing[1])
+		close(plumbing[1]);
 
 	return err_cnt;
 }
@@ -144,6 +153,8 @@ out:
 int test_p()
 {
 	int err_cnt = 0;
+	int plumbing[2] = { 0, 0 };
+	Z_die_if(pipe(plumbing), "bad turd-herder");
 
 	/* make cbufp large enough for entire file */
 	uint32_t cnt = sz_src / BLK_SZ + 1;
@@ -160,13 +171,13 @@ int test_p()
 			pkt_sz = sz_src - (pkt_sz * (cnt-1));
 
 		/* splice into pipe (increments seek position @ source */
-		temp = splice(src_fd, NULL, b->plumbing[1], NULL, pkt_sz, 0);
+		temp = splice(src_fd, NULL, plumbing[1], NULL, pkt_sz, 0);
 		Z_die_if(temp != pkt_sz, 
 			"file -> plumbing: temp %ld != pkt_sz %ld @i=%ld",
 			temp, pkt_sz, i);
 
 		/* splice into 'cbuf' (actually, backing store) */
-		temp = cbuf_splice_from_pipe(b->plumbing[0], b, pos, i, pkt_sz);
+		temp = cbuf_splice_from_pipe(plumbing[0], b, pos, i, pkt_sz);
 		Z_die_if(temp != pkt_sz, 
 			"plumbing -> cbufp: temp %ld != pkt_sz %ld @i=%ld",
 			temp, pkt_sz, i);
@@ -182,7 +193,7 @@ int test_p()
 			pkt_sz = sz_src - (pkt_sz * (cnt-1));
 
 		/* splice into plumbing */
-		temp = cbuf_splice_to_pipe(b, pos, i, b->plumbing[1]);
+		temp = cbuf_splice_to_pipe(b, pos, i, plumbing[1]);
 		Z_die_if(temp != pkt_sz, 
 			"cbuf -> plumbing: temp %ld != pkt_sz %ld @i=%ld", 
 			temp, pkt_sz, i);
@@ -190,13 +201,17 @@ int test_p()
 		/* splice into destination file.
 		Increments sz_sent as it writes.
 			*/
-		temp = splice(b->plumbing[0], NULL, dst_fd, NULL, pkt_sz, 0);
+		temp = splice(plumbing[0], NULL, dst_fd, NULL, pkt_sz, 0);
 		Z_die_if(temp != pkt_sz, 
 			"plumbing -> file: temp %ld != pkt_sz %ld @i=%ld", 
 			temp, pkt_sz, i);
 	}
 
 out:
+	if (plumbing[0])
+		close(plumbing[0]);
+	if (plumbing[1])
+		close(plumbing[1]);
 	return err_cnt;
 }
 
@@ -241,12 +256,7 @@ void *splice_tx(void *args)
 			cbuf_snd_rls_m(b, step_sz);
 		}
 	}
-	cbuf_chk_t *checkpoint = cbuf_checkpoint_snapshot(b);
-	i = 0;
-	while (!cbuf_checkpoint_verif(b, checkpoint)) {
-		i++;
-		pthread_yield();
-	}
+	i = cbuf_checkpoint_loop(b);
 	Z_inf(1, "%d iter on cbuf_checkpoint_verif", i);
 
 out:
