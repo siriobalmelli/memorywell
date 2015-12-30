@@ -326,20 +326,6 @@ int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint)
 	cbuf_actuals__(b, NULL, (uint32_t *)&actual_rcv);
 
 	return (actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff;
-
-#if 0
-	/* we would return this directly ... */
-	int ret = (actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff;
-
-	/* but sometimes we STALL??? WHY?????? */
-	if (!ret && (!b->rcv_reserved && !b->rcv_uncommit)) {
-		Z_err("STALLED check: diff %ld < checkpoint %ld",
-			actual_rcv - checkpoint->actual_rcv, checkpoint->diff);
-		return 1;
-	}
-
-	return ret;
-#endif
 }
 
 /*	cbuf_splice_sz()

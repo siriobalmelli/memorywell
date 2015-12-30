@@ -34,7 +34,6 @@ void cbuf_release_scary__(cbuf_t	*buf,
 uint64_t cbuf_actual_receiver__(cbuf_t *buf,
 			uint64_t	*snd_pos,
 			uint64_t	*sz_unused);
-//void	cbuf_actuals__(cbuf_t *buf, int64_t *act_snd, int64_t *act_rcv);
 void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv);
 
 #endif /* cbuf_int_h_ */

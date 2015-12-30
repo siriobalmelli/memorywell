@@ -239,28 +239,7 @@ void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv)
 {
 	cbuf_t snap;
 
-	/* iterate until we have a clean snap of variables
-	TODO: easier way to do an atomic memcpy?
-		*/
-#if 0
-	do {
-		memcpy(&snap, buf, sizeof(cbuf_t));
-	} while(
-		!__atomic_compare_exchange_n(&buf->snd_pos, &snap.snd_pos, snap.snd_pos,
-				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-		|| !__atomic_compare_exchange_n(&buf->snd_reserved, &snap.snd_reserved, snap.snd_reserved,
-				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-		|| !__atomic_compare_exchange_n(&buf->snd_uncommit, &snap.snd_uncommit, snap.snd_uncommit,
-				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-
-		|| !__atomic_compare_exchange_n(&buf->rcv_pos, &snap.rcv_pos, snap.rcv_pos,
-				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-		|| !__atomic_compare_exchange_n(&buf->rcv_reserved, &snap.rcv_reserved, snap.rcv_reserved,
-				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-		|| !__atomic_compare_exchange_n(&buf->rcv_uncommit, &snap.rcv_uncommit, snap.rcv_uncommit,
-				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-	);
-#endif
+	/* iterate until we have a clean snap of variables */
 	do {
 		memcpy(&snap, buf, sizeof(cbuf_t));
 	} while (memcmp(&snap, buf, sizeof(cbuf_t)));
