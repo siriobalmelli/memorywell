@@ -228,35 +228,12 @@ void cbuf_release_scary__(cbuf_t		*buf,
 	__atomic_add_fetch(sz_dest, blk_sz, __ATOMIC_SEQ_CST);
 }
 
-/*	cbuf_actual_receiver__()
-Takes an atomic snapshot of snd_pos and sz_unused to get "actual receiver".
-For more details on the concept of "actual receiver", see comments above 
-	`cbuf_checkpoint_snapshot`.
-Does not mask the value before returning. Not all callers find this desirable.
-
-TODO: this needs to go away
-	*/
-uint64_t cbuf_actual_receiver__(cbuf_t *buf,
-			uint64_t	*snd_pos,
-			uint64_t	*sz_unused)
-{
-	cbuf_t check;
-	/* iterate until we have a clean snapshot of variables */
-	do {
-		memcpy(&check, buf, sizeof(cbuf_t));
-		__atomic_store_n(sz_unused, buf->sz_unused, __ATOMIC_SEQ_CST);
-		__atomic_store_n(snd_pos, buf->snd_pos, __ATOMIC_SEQ_CST);
-	} while(!__atomic_compare_exchange_n(&buf->sz_unused, &check.sz_unused, check.sz_unused,
-				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
-		|| !__atomic_compare_exchange_n(&buf->snd_pos, &check.snd_pos, check.snd_pos,
-				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
-
-	return *snd_pos + *sz_unused;
-}
-
 /*	cbuf_actuals__()
 
-TODO: document this
+Take an atomic snapshot of a cbuf.
+
+Pass "actual sender" and "actual receiver" variables to caller if
+	given pointers.
 	*/
 void	cbuf_actuals__(cbuf_t *buf, int64_t *act_snd, int64_t *act_rcv)
 {

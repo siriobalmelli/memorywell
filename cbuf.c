@@ -247,94 +247,85 @@ uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt)
 	*out_cnt = (buf->rcv_reserved + buf->rcv_uncommit) >> buf->sz_bitshift_;
 
 	/* return actual receiver */
+	/*
 	uint64_t snd_pos;
 	uint64_t sz_unused;
 	return cbuf_actual_receiver__(buf, &snd_pos, &sz_unused) & buf->overflow_;
+	*/
+	return (buf->snd_pos + buf->sz_unused) & buf->overflow_;
 }
 
 /*	cbuf_checkpoint_snapshot()
 
-Take a "snapshot" of the current sender position IN RELATION TO the "actual receiver".
-Note that this checkpoint concept relies on NOT overflowing, or "unrolling" the count.
-uint64_t for the edge case where size of cbuf (overflow_ +1) == UINT32_MAX.
+Take a "snapshot" of a circular buffer, which can be later be checked to verify 
+	that all outstanding blocks 
+		(released by sender, not yet consumed AND released by receiver(s))
+	have been released.
 
-some interesting equations:
+The basic problem is, from the viewpoint of a cbuf sender:
+	"how do I know when receiver has consumed all blocks I have sent?"
+This is made trickier by the fact that OTHER senders may be interleaving packets
+	amongst and AFTER the ones we have sent.
+An interesting factor is that a circular buffer by definition rolls over:
+	there is no guarantee that `snd_pos > rcv_pos`.
+
+CAVEATS: 
+	Before calling `checkpoint`, sender must ALREADY have 
+		RELEASED any blocks previously reserved.
+	A thread may only snapshot and verif ONE cbuf at a single time
+		(this is a design tradeoff of using a static __thread struct
+		internally).
+
+With checkpoints, we talk about "actual sender" and "actual receiver"
+	positions. 
+The so-called "actual" position of a (sender|receiver) is the most conservative
+	estimate of what has been read/written by callers on that side of the
+	buffer.
+The "actual" position treats "reserved" and "uncommitted" blocks as
+	unread or unwritten. 
+In other words, a block hasn't been consumed until it is RELEASED.
+
+Some interesting equations:
 	snd_pos = "actual sender" + (snd_reserved + snd_uncommitted);
 		"actual sender" = rcv_pos + ready;
 	rcv_pos = "actual receiver" + (rcv_reserved + rcv_uncommitted);
 		"actual receiver" = snd_pos + unused;
 
-The concept is that once "actual receiver" moves PAST the "snapshot" of
-	a previous sender position, all bytes up to that snapshot
-	will have been "consumed" (aka: reserved AND released by receiver).
+The concept is that by (atomically) recording both the "actual receiver"
+	and the DIFFERENCE between that and "actual sender",
+	we create a snapshot that can be compared against a later value of
+	"actual receiver" to see if it has advanced AT LEAST as far as the
+	`diff` value in the snapshot.
 
-RETURNS: a uint64_t which can be fed to `cbuf_checkpoint_verif()` later.
+RETURNS: a pointer which can be fed to subsequent `verif()` calls.
 	*/
-# if 0
-uint64_t	cbuf_checkpoint_snapshot(cbuf_t *b)
-{
-	/*  get a clean snapshot of variables */
-	uint64_t ret;
-	uint64_t sz_unused;
-	uint64_t actual_rcv = cbuf_actual_receiver__(b, &ret, &sz_unused);
-
-	/* If sender is smaller than "actual receiver", it actually rolled over:
-		add a full buffer size to it.
-	NOTE: snd_pos + unused == "actual receiver".
-		*/
-	if (ret < actual_rcv)
-		ret += b->overflow_ +1;
-	Z_inf(3, "snapshot. snd_pos(unrolled) %ld, 'actual receiver' %ld",
-		ret, actual_rcv);
-	return ret;
-}
-#endif
 cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b)
 {
-	/* obviates the memory leak from function exiting for some other reason
-		before it is done with checkpoint_verif() step.
+	/* obviates memory leak from function exiting for some other reason
+		before it is done looping on `checkpoint_verif()`.
 		*/
 	static __thread cbuf_chk_t ret;
 
-	int64_t actual_snd;
-	cbuf_actuals__(b, &actual_snd, &ret.actual_rcv);
-	ret.diff = actual_snd - ret.actual_rcv;
+	// save the stack, use `diff` as a scratchpad to store "actual sender"
+	cbuf_actuals__(b, &ret.diff, &ret.actual_rcv);
+	ret.diff = ret.diff - ret.actual_rcv;
 
 	return &ret;
 }
 
-int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint)
-{
-	int64_t actual_rcv;
-	cbuf_actuals__(b, NULL, &actual_rcv);
-	return (actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff;
-}
-
 /*	cbuf_checkpoint_verif()
-
 Verifies state of the current cbuf at `b` against a checkpoint previously
 	produced by `cbuf_checkpoint_snapshot()`.
 
 RETURNS 1 if all data through `snd_pos` at the time snapshot was taken 
 	has been consumed by receiver.
 	*/
-#if 0
-int cbuf_checkpoint_verif(cbuf_t *b, uint64_t checkpoint)
+int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint)
 {
-	/* "actual receiver" is the concept of 
-		"what does the receiver NO LONGER CARE ABOUT."
-	This is : `rcv_pos - (rcv_reserved + rcv_uncommit)`
-		... but subtraction is messy to roll over "before 0",
-		so we use the equivalent `snd_pos + unused`
-	When "actual receiver" has surpassed the snd_pos at time of snapshot,
-		all data which was queued for receiver at the time is
-		guaranteed to have been released by receiver.
-		*/
-	uint64_t actual_rcv = ((uint64_t)b->snd_pos + b->sz_unused); /* notice we don't mask to overflow */
-	Z_inf(3, "checkpoint: %ld vs 'actual receiver' %ld", checkpoint, actual_rcv);
-	return actual_rcv >= checkpoint;
+	int64_t actual_rcv;
+	cbuf_actuals__(b, NULL, &actual_rcv);
+	return (actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff;
 }
-#endif
 
 /*	cbuf_splice_sz()
 
