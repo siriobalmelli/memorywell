@@ -139,7 +139,6 @@ typedef struct {
 	uint32_t	rcv_uncommit;	/* Not committed because other readers I/P. */
 
 	uint64_t	unused;		/* used to be "plumbing" TODO: put to good use? */
-#endif
 }__attribute__ ((packed))	cbuf_t;
 
 typedef struct {
