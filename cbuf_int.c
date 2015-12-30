@@ -242,6 +242,7 @@ void	cbuf_actuals__(cbuf_t *buf, int64_t *act_snd, int64_t *act_rcv)
 	/* iterate until we have a clean snap of variables
 	TODO: easier way to do an atomic memcpy?
 		*/
+#if 0
 	do {
 		memcpy(&snap, buf, sizeof(cbuf_t));
 	} while(
@@ -259,6 +260,10 @@ void	cbuf_actuals__(cbuf_t *buf, int64_t *act_snd, int64_t *act_rcv)
 		|| !__atomic_compare_exchange_n(&buf->rcv_uncommit, &snap.rcv_uncommit, snap.rcv_uncommit,
 				0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 	);
+#endif
+	do {
+		memcpy(&snap, buf, sizeof(cbuf_t));
+	} while (memcmp(&snap, buf, sizeof(cbuf_t)));
 
 	/* output "actual sender" and "actual receiver" */
 	if (act_snd)
