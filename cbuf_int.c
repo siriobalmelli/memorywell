@@ -91,16 +91,15 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 		left before the cache line boundary in cbuf_t.
 		*/
 	char tfile[] = "/tmp/cbufXXXXXX";
-	int fd = mkostemp(tfile, O_NOATIME);
-	Z_die_if(fd == -1 || fd > UINT16_MAX, "temp");
+	b->mmap_fd = mkostemp(tfile, O_NOATIME);
+	Z_die_if(b->mmap_fd == -1 || b->mmap_fd > UINT16_MAX, "temp");
 	/* make space, map */
 	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
-	Z_die_if(ftruncate(fd, len), "");
+	Z_die_if(ftruncate(b->mmap_fd, len), "");
 	/* MUST be MAP_SHARED. If not, cbuf -> file splices WILL NOT WRITE to disk. */
 	b->buf = mmap(NULL, len, (PROT_READ | PROT_WRITE), 
-		(MAP_SHARED | MAP_LOCKED | MAP_NORESERVE), fd, 0);
+		(MAP_SHARED | MAP_LOCKED | MAP_NORESERVE), b->mmap_fd, 0);
 	Z_die_if(b->buf == MAP_FAILED, "sz:%ld", len);
-	b->mmap_fd = fd;
 	Z_die_if(unlink(tfile), "");
 
 	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d", 
@@ -120,6 +119,13 @@ void cbuf_free_(cbuf_t *buf)
 		Z_warn_if(buf->sz_ready, "cbuf @0x%lx: %ld bytes unconsumed", 
 			(uint64_t)buf, buf->sz_ready);
 	);
+
+	/* mark buffer closing, wait for any pending checkpoints */
+	uint16_t cnt = __atomic_or_fetch(&buf->chk_cnt, CBUF_CHK_CLOSING, __ATOMIC_SEQ_CST);
+	while (cnt != CBUF_CHK_CLOSING) { /* this is 0 ongoing checkpoint loops, plus the flag we set */
+		CBUF_YIELD();
+		cnt = __atomic_load_n(&buf->chk_cnt, __ATOMIC_SEQ_CST);
+	}
 
 	/* free memory */
 	if (buf->buf) {

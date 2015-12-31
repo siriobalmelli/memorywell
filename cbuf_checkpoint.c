@@ -1,5 +1,7 @@
 #include "cbuf_int.h"
 
+extern int kill_flag;
+
 /*	cbuf_checkpoint_snapshot()
 
 Take a "snapshot" of a circular buffer, which can be later be checked to verify 
@@ -54,6 +56,19 @@ cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b)
 		.actual_rcv = 0	
 	};
 
+	/* Don't start checkpointing if we are closing,
+	Atomically mark checkpoint so cleanup will wait 
+		for a verif() operation to decrement until it reaches 0.
+		*/
+	uint16_t cnt, cnt_new;
+	do {
+		cnt = b->chk_cnt;
+		if (cnt & CBUF_CHK_CLOSING)
+			return NULL;
+		cnt_new = cnt + 1;
+	} while(!__atomic_compare_exchange(&b->chk_cnt, &cnt, &cnt_new,
+			0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
+
 	// use `diff` as a scratchpad to store "actual sender"
 	cbuf_actuals__(b, (uint32_t *)&ret.diff, (uint32_t*)&ret.actual_rcv);
 	ret.diff = ret.diff - ret.actual_rcv;
@@ -80,6 +95,7 @@ int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint)
 Loops until checkpoint is reached or surpassed, yielding/sleeping in the interim.
 
 Returns: number of loop iterations waited.
+	-1 if loop was interrupted by closing buffer.
 	*/
 int		cbuf_checkpoint_loop(cbuf_t *buf)
 {
@@ -88,8 +104,19 @@ int		cbuf_checkpoint_loop(cbuf_t *buf)
 	
 	while (!cbuf_checkpoint_verif(buf, check)) {
 		i++;
+		
+		/* handle case where buffer is closing */
+		if ((buf->chk_cnt & CBUF_CHK_CLOSING) 
+			|| kill_flag)
+		{
+			i = -1;
+			break;
+		}
+
 		CBUF_YIELD();
 	}
 
+	/* log checkpoint done before exiting */
+	__atomic_sub_fetch(&buf->chk_cnt, 1, __ATOMIC_SEQ_CST);
 	return i;
 }

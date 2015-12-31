@@ -94,11 +94,15 @@ TERMINOLOGY
 #include "zed_dbg.h"
 
 /* effectively a `pthread_yield()` but without having to include threading libraries */
-#define CBUF_YIELD() usleep(100)
+#define CBUF_YIELD() usleep(10000)
 
 #define CBUF_P		0x01	/* this cbuf contains pointers to the data,
 					not the data itself.
 					*/
+
+#define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.
+					This is the high bit in `chk_cnt` below.
+						*/
 
 typedef struct {
 	void		*buf;		/* Contiguous block of memory over which
@@ -112,12 +116,9 @@ typedef struct {
 						more than 32.
 						*/
 	uint8_t		cbuf_flags;
-	uint16_t	mmap_fd;	/* This SHOULD be 32bits, but I ran out
-						of space on a 64B cacheline :(
-					All structures manipulating mmmap'ed file 
-						need to work on their own internal
-						signed integer fd and do
-						error checking on that one.
+	uint16_t	chk_cnt;	/* how many checkpoints in progress?
+					Cannot clean up until all checkpoint
+						loops are finished.
 						*/
 	uint32_t	overflow_;	/* Used for quick masking of `pos` variables. 
 					It's also `buf_sz -1`, and is used 
@@ -138,7 +139,8 @@ typedef struct {
 	uint32_t	rcv_reserved;	/* Reserved by readers(s). */
 	uint32_t	rcv_uncommit;	/* Not committed because other readers I/P. */
 
-	uint64_t	unused;		/* used to be "plumbing" TODO: put to good use? */
+	int		mmap_fd;	/* FD of mmap'ed CBUF file itself */
+	uint32_t	unused;		/* pad out to 64B cache line */
 }__attribute__ ((packed))	cbuf_t;
 
 typedef struct {
