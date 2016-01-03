@@ -113,7 +113,7 @@ int		cbuf_checkpoint_loop(cbuf_t *buf)
 			break;
 		}
 
-		CBUF_YIELD();
+		usleep(100000);
 	}
 
 	/* log checkpoint done before exiting */
