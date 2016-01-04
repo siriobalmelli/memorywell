@@ -94,7 +94,7 @@ TERMINOLOGY
 #include "zed_dbg.h"
 
 /* effectively a `pthread_yield()` but without having to include threading libraries */
-#define CBUF_YIELD() usleep(1000)
+#define CBUF_YIELD() usleep(100)
 
 #define CBUF_P		0x01	/* this cbuf contains pointers to the data,
 					not the data itself.
