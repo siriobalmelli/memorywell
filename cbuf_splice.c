@@ -50,6 +50,10 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 {
 	if (!size)
 		return 0;
+	if (size > cbuf_splice_max(b)) {
+		Z_err("%ld splice too big for cbuf. resizing", size);
+		size = cbuf_splice_max(b);
+	}
 
 	size_t *cbuf_head;
 	loff_t temp_offset;
@@ -59,12 +63,6 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 	if (b->cbuf_flags & CBUF_P) {
 		cbufp_t *f = cbuf_offt(b, pos, i);
 
-		/* sanity */
-		if (size > f->blk_iov.iov_len){
-			Z_err("size %d larger than iov_len %d", (int)size, (int)f->blk_iov.iov_len);
-			size = f->blk_iov.iov_len;
-		}
-		
 		/* params */
 		temp_offset = f->blk_offset;
 		cbuf_head = &f->data_len;
@@ -72,10 +70,6 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 
 	/* params: cbuf block itself as splice destination */
 	} else {
-		/* sanity */
-		if (size > (cbuf_sz_obj(b) - sizeof(size_t)))
-			size = cbuf_sz_obj(b) - sizeof(size_t);
-
 		/* get head of buffer block, put offset from buf fd info cbuf_off */
 		temp_offset = cbuf_lofft(b, pos, i, &cbuf_head);
 		/* fd is the cbuf itself */

@@ -163,12 +163,14 @@ typedef struct {
 /* compute some basic values out of a cbuf struct */
 Z_INL_FORCE uint32_t cbuf_sz_buf(cbuf_t *b) { return b->overflow_ + 1; }
 Z_INL_FORCE uint32_t cbuf_sz_obj(cbuf_t *b) { return 1 << b->sz_bitshift_; }
+/*
 Z_INL_FORCE uint64_t cbuf_sz_p(cbuf_t *b) 
 { 
 	if (!(b->cbuf_flags & CBUF_P)) 
 		return 0;
 	return ((cbufp_t *)b->buf)->iov.iov_len;
 }
+*/
 Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bitshift_; }
 
 /* create/free */

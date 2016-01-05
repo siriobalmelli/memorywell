@@ -195,7 +195,7 @@ out:
 
 void *rcv_thread(void *args)
 {
-	uint64_t busy_waits = 0;
+	volatile uint64_t busy_waits = 0;
 	mts_setup_thr_();
 
 	cbuf_t *b = (cbuf_t *)args;
@@ -237,7 +237,7 @@ retry:
 
 void *snd_thread(void *args)
 {
-	uint64_t busy_waits = 0;
+	volatile uint64_t busy_waits = 0;
 	mts_setup_thr_();
 
 	cbuf_t *b = (cbuf_t *)args;
