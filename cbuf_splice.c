@@ -89,7 +89,8 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 	/* if got error, reset to "nothing" */
 	if (*cbuf_head == -1)
 		*cbuf_head = 0;
-	Z_err_if(*cbuf_head == 0, "*cbuf_head %ld; size %ld", *cbuf_head, size);
+	//Z_err_if(*cbuf_head == 0, "*cbuf_head %ld; size %ld", *cbuf_head, size);
+	Z_err_if(*cbuf_head != size, "*cbuf_head %ld; size %ld", *cbuf_head, size);
 
 	/* done */
 	return *cbuf_head;
