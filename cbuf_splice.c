@@ -8,6 +8,7 @@ Returns the SIZE OF SPLICED DATA represented by a cbuf block,
 	*/
 size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i)
 {
+	size_t ret;
 	/* get base of block being pointed to */
 	void *base = cbuf_offt(b, pos, i);
 
@@ -15,12 +16,20 @@ size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i)
 		Typecast and dereference.
 		*/
 	if (b->cbuf_flags & CBUF_P)
-		return ((cbufp_t *)base)->data_len;
+		ret = ((cbufp_t *)base)->data_len;
 
 	/* Otherwise, data length is in the first 8B of the block itself.
 		Typecast and dereference.
 		*/
-	return *((size_t *)base);
+	else
+		ret = *((size_t *)base);
+
+	if (ret > cbuf_splice_max(b)) {
+		Z_err("cbuf 0x%lx pos %d i %d thinks it's size is %ld. likely corrupt.", 
+			(uint64_t)b, pos, i, ret);
+		ret=0;
+	}
+	return ret;
 }
 
 /*	cbuf_splice_from_pipe()
@@ -123,6 +132,10 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 	/* no data, no copy */
 	if (*cbuf_head == 0)
 		return 0;
+	if (*cbuf_head > cbuf_splice_max(b)) {
+		Z_err("corrupt splice size of %ld", *cbuf_head);
+		return 0;
+	}
 	/* Pull chunk from buffer.
 		Could return -1 if dest. pipe is full.
 		Have pipe empty before running this, then evacuate pipe.

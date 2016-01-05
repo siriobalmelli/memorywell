@@ -200,6 +200,15 @@ int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint);
 int		cbuf_checkpoint_loop(cbuf_t *buf);
 
 /* splice */
+Z_INL_FORCE size_t cbuf_splice_max(cbuf_t *b)
+{
+	/* if buffer has a backing store, get length of one of the blocks */
+	if (b->cbuf_flags & CBUF_P)
+		return ((cbufp_t *)b->buf)->blk_iov.iov_len;
+
+	/* if not, subtract the size of a header from `sz_obz` and return this */
+	return cbuf_sz_obj(b) - sizeof(size_t);
+}
 size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i);
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size);
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write);
