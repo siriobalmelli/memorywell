@@ -83,12 +83,19 @@ Verifies state of the current cbuf at `b` against a checkpoint previously
 RETURNS 1 if all data through `snd_pos` at the time snapshot was taken 
 	has been consumed by receiver.
 	*/
-int		cbuf_checkpoint_verif(cbuf_t *b, cbuf_chk_t *checkpoint)
+int		cbuf_checkpoint_verif(cbuf_t *buf, cbuf_chk_t *checkpoint)
 {
-	int64_t actual_rcv = 0;
-	cbuf_actuals__(b, NULL, (uint32_t *)&actual_rcv);
+	uint32_t actual_rcv = 0;
+	cbuf_actuals__(buf, NULL, &actual_rcv);
 
-	return (actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff;
+	return ((int64_t)actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff
+	/* This second test in case we slept too long and buffer
+		lapped all the way around: but then data stopped being
+		sent and we would otherwise wait eternally .. on an empty buffer.
+		*/
+		|| (	__atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST) 
+			== __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)
+		);
 }
 
 /*	cbuf_checkpoint_loop()
@@ -113,7 +120,7 @@ int		cbuf_checkpoint_loop(cbuf_t *buf)
 			break;
 		}
 
-		usleep(100000);
+		CBUF_YIELD();
 	}
 
 	/* log checkpoint done before exiting */

@@ -226,27 +226,48 @@ void cbuf_release_scary__(cbuf_t		*buf,
 
 /*	cbuf_actuals__()
 
-Take an atomic snapshot of a cbuf.
+Take a faux-atomic snapshot of either/both "actual sender" and "actual receiver",
+	depending on which pointers are given.
 
-Pass "actual sender" and "actual receiver" variables to caller if
-	given pointers.
+There is no structure-wide mutex which we can lock to guarantee that 
+	all variables are being read AT THE SAME TIME.
+The solution is based on the observation that variables change in predictable WAYS 
+	(even if at unpredictable times, in unpredictable amounts).
+
+We want to avoid that a "diff" (act_snd - act_rcv == "unprocessed by rcv")
+	is TOO large: that would keep a checkpoint loop waiting incorrectly.
+Both `act_snd` and `act_rcv` can only increase.
+	But "act_snd++ --> diff++" whereas "act_rcv++ --> diff--".
+	This means: get `act_snd` FIRST.
+Both `act_snd` and `act_rcv` are made up of a "pos" and a counter:
+	`act_snd == rcv_pos + sz_ready`
+	`act_rcv == snd_pos + sz_unused`
+	Of these two, the `pos` can only increase, whereas the counter may
+		increase or decrease.
+	This means that for `act_snd` (which we want the LOWEST possible value for)
+		we should get `rcv_pos` FIRST.
+	For `act_rcv` however (which we want the HIGHEST possible value for)
+		we should get the counter (sz_unused) first.
+
+Both values are masked so as to give actual position values.
 	*/
 void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv)
 {
-	cbuf_t snap;
+	if (act_snd) {
+		__atomic_store_n(act_snd, 
+				(__atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST)
+					+ __atomic_load_n(&buf->sz_ready, __ATOMIC_SEQ_CST) 
+				) & buf->overflow_,
+			__ATOMIC_SEQ_CST);
+	}
 
-	/* iterate until we have a clean snap of variables */
-	do {
-		memcpy(&snap, buf, sizeof(cbuf_t));
-	} while (memcmp(&snap, buf, sizeof(cbuf_t)));
-
-	/* output "actual sender" and "actual receiver" */
-	if (act_snd)
-		*act_snd = (snap.rcv_pos + snap.sz_ready) & snap.overflow_;
-		//*act_snd = snap.snd_pos - snap.snd_reserved - snap.snd_uncommit;
-	if (act_rcv)
-		*act_rcv = (snap.snd_pos + snap.sz_unused) & snap.overflow_;
-		//*act_rcv = snap.rcv_pos - snap.rcv_reserved - snap.rcv_uncommit;
+	if (act_rcv) {
+		__atomic_store_n(act_rcv, 
+				(__atomic_load_n(&buf->sz_unused, __ATOMIC_SEQ_CST) 
+					+ __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)
+				) & buf->overflow_,
+			__ATOMIC_SEQ_CST);
+	}
 }
 
 #undef Z_BLK_LVL

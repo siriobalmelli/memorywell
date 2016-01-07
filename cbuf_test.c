@@ -2,12 +2,10 @@
 #include "mtsig.h"
 #include <time.h>
 
-#define STEP_SIZE 32 /*	how many I/O operations to push into circ buf in one go */
-#define NUMITER 9600000 /* number of read-writes, 
-		       must divide evenly by STEP_SIZE or else
-		       data checking will fail */
-#define PAD_SIZE 48 /* how many bytes to pad the 'sequence' with */
-#define THREAD_CNT 5 /* must be less than or equal to NUMITER */
+#define STEP_SIZE 32	/* How many blocks should we try to reserve at one time */
+//#define NUMITER 4800000	
+#define NUMITER 756432	/* Number of read-writes PER THREAD. */
+#define THREAD_CNT 33	/* must be less than or equal to NUMITER */
 
 #define OBJ_SZ (sizeof(struct sequence) *1UL)
 #define OBJ_CNT (STEP_SIZE * 100UL)
@@ -17,7 +15,7 @@ sig_atomic_t kill_flag = 0; /* global kill flag assumed by mtsig */
 struct sequence {
 	int		i;
 	pthread_t	my_id;
-	char		padding[PAD_SIZE];
+	char		padding[48];
 };
 
 int test_cbuf_single();
@@ -51,7 +49,7 @@ int main()
 	Z_inf(0, "ELAPSED: %ld", start);
        
 	start = clock();
-	Z_inf(0, "single thread, stepped (malloc): %d", STEP_SIZE);
+	Z_inf(0, "single thread, stepped: %d", STEP_SIZE);
 	err_cnt += test_cbuf_steps();
 	start = clock() - start;
 	Z_inf(0, "ELAPSED: %ld", start);
@@ -181,11 +179,22 @@ int test_cbuf_threaded()
 	}
 	Z_inf(0, "receivers: %ld waits", busywait_rcv);
 
+	/* verify non-overlap of cbuf reservations */
+	uint32_t exp_pos = (cbuf_sz_obj(buf) * NUMITER * THREAD_CNT) & buf->overflow_;
+	Z_err_if(exp_pos != (buf->snd_pos & buf->overflow_), 
+		"exp_pos %d != snd_pos %d\n \
+		obj_sz %d, NUMITER %d, THREAD_CNT %d, overflow 0x%x", 
+		exp_pos, buf->snd_pos, cbuf_sz_obj(buf), 
+		NUMITER, THREAD_CNT, buf->overflow_);
+	/* verify that expected sum is correct */
+	Z_err_if(expected_sum != final_verif, 
+		"expected_sum %ld - final_verif %ld = %ld",
+		expected_sum, final_verif, expected_sum - final_verif);
 	/* verify integrity of data */
-	Z_die_if(global_sum != expected_sum, "global_sum %ld != expected_sum %ld",
-			global_sum, expected_sum);
-	Z_die_if(expected_sum != final_verif, "expected_sum %ld != final_verif %ld",
-			expected_sum, final_verif);
+	Z_err_if(global_sum != expected_sum,
+		"global_sum %ld - expected_sum %ld = %ld\n\
+		... this is known to fail from time to time and Sirio has no clue WHY ;(((",
+		global_sum, expected_sum, global_sum - expected_sum);
 
 out:
 	if (buf)
@@ -195,7 +204,7 @@ out:
 
 void *rcv_thread(void *args)
 {
-	volatile uint64_t busy_waits = 0;
+	volatile uint64_t busy_waits = 0; /* volatile because mts_jump */
 	mts_setup_thr_();
 
 	cbuf_t *b = (cbuf_t *)args;
@@ -210,7 +219,7 @@ void *rcv_thread(void *args)
 	for (i=0; i < NUMITER; i += step_sz) {
 retry:
 		step_sz = STEP_SIZE;
-		if ( i + step_sz >= NUMITER )
+		if ( i + step_sz > NUMITER )
 		       step_sz = NUMITER - i;	
 		pos = cbuf_rcv_res_m_cap(b, &step_sz);
 		if (pos == -1) {
@@ -221,9 +230,11 @@ retry:
 		} else {
 			for (j=0; j < step_sz; j++) {
 				s = cbuf_offt(b, pos, j);
-				//Z_inf(0, "s @%08lx i = %d", (uint64_t)s, s->i);
 				/* add to global sum; will be used to test data integrity */
-				__atomic_add_fetch(&global_sum, s->i, __ATOMIC_SEQ_CST);
+				__atomic_add_fetch(&global_sum, 
+					__atomic_load_n(&s->i, __ATOMIC_SEQ_CST),
+					__ATOMIC_SEQ_CST);
+				//Z_inf(0, "s @%08lx i = %d", (uint64_t)s, s->i);
 			}
 			cbuf_rcv_rls_m(b, step_sz);
 		}
@@ -251,9 +262,9 @@ void *snd_thread(void *args)
 	size_t step_sz = 0;
 	for (i=0; i < NUMITER; i += step_sz) {
 retry:
-		/* try and reserve a random step size */
-		step_sz = rand();
-		if ( i + step_sz >= NUMITER )
+		/* NO: step size is hard-coded in test */
+		step_sz = STEP_SIZE;
+		if ( i + step_sz > NUMITER )
 		       step_sz = NUMITER - i;	
 		pos = cbuf_snd_res_m_cap(b, &step_sz);
 		if (pos == -1) {
@@ -262,13 +273,11 @@ retry:
 			pthread_yield();
 			goto retry;
 		} else {
-			//Z_inf(0, "pos %d", pos);
 			/* add to the sequence */
 			for (j=0; j < step_sz; j++) {
 				s = cbuf_offt(b, pos, j);
-				s->i = i+j; /* this will be used for
-						 'data integrity' check */
-
+				/* this will be used for 'data integrity' check */
+				__atomic_store_n(&s->i, i+j, __ATOMIC_SEQ_CST);
 				/* ... and it will be checked against this: */
 				__atomic_add_fetch(&expected_sum, s->i, __ATOMIC_SEQ_CST);
 			}

@@ -201,7 +201,7 @@ int test_p()
 		/* splice into destination file.
 		Increments sz_sent as it writes.
 			*/
-		temp = splice(plumbing[0], NULL, dst_fd, NULL, pkt_sz, 0);
+		temp = splice(plumbing[0], NULL, dst_fd, (loff_t *)&sz_sent, pkt_sz, 0);
 		Z_die_if(temp != pkt_sz, 
 			"plumbing -> file: temp %ld != pkt_sz %ld @i=%ld", 
 			temp, pkt_sz, i);
