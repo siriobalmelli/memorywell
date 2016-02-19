@@ -360,10 +360,7 @@ int straight_splice()
 		if (sz_received == -1)
 			break;
 		while (sz_received) {
-			/* Does NOT advance fd seek: depends on sz_sent 
-			   to give an offset from beginning of file.
-			   NOTE that splice ADVANCES the offset (!).
-				*/
+			/* NOTE that splice ADVANCES the offset (!). */
 			temp = splice(piping[0], NULL, dst_fd, 
 				(loff_t *)&sz_sent, sz_received, 0);
 			Z_die_if(temp == -1, "dst splice size %ld", sz_sent);

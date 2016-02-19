@@ -82,7 +82,7 @@ TERMINOLOGY
 	#define _GNU_SOURCE
 	/* mkostemp, splice */
 #endif
-#include <fcntl.h>
+#include <fcntl.h> /* splice() */
 #include <stdint.h> /* [u]int[blah] */
 #include <stdlib.h> /* mkostemp */
 #include <sys/mman.h> /* mmap */
