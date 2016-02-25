@@ -99,6 +99,10 @@ TERMINOLOGY
 #define CBUF_P		0x01	/* this cbuf contains pointers to the data,
 					not the data itself.
 					*/
+#define CBUF_MALLOC	0x02	/* This cbuf does NOT have a mmap()'ed backing store. 
+				It cannot be used for splices.
+				TODO: implement
+					*/
 
 #define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.
 					This is the high bit in `chk_cnt` below.
@@ -185,6 +189,7 @@ void cbuf_rcv_rls(cbuf_t *buf);
 void cbuf_rcv_rls_m(cbuf_t *buf, size_t cnt);
 
 /* sophisticated buffer tricks */
+void		cbuf_snd_rls_mscary(cbuf_t *buf, size_t cnt);
 void		cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt);
 uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
 

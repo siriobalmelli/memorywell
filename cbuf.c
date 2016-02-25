@@ -227,6 +227,17 @@ void cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt)
 			&buf->sz_unused);
 }
 
+void cbuf_snd_rls_mscary(cbuf_t *buf, size_t cnt)
+{
+	if (!cnt)
+		return;
+	return cbuf_release_scary__(buf, cnt << buf->sz_bitshift_, 
+			&buf->snd_reserved, 
+			&buf->snd_uncommit,
+			&buf->sz_ready);
+}
+
+
 /*	cbuf_rcv_held()
 
 Get `pos` and `i` for ALL blocks currently reserved or uncommitted
