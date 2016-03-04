@@ -39,117 +39,9 @@ void *src_buf = NULL, *dst_buf = NULL;
 size_t sz_src = 0, sz_sent = 0;
 cbuf_t *b = NULL;
 
-int test_splice_integrity()
-{
-	const int i_flags = O_RDWR | O_NOATIME | O_CREAT | O_TRUNC | O_NONBLOCK;
-	const int i_size = UINT8_MAX; /* how large a memory region? */
-
-	int err_cnt = 0;
-	int i;
-	int i_src_fd = 0, i_dst_fd = 0;
-	uint8_t *i_src_data = NULL, *i_dst_data = NULL;
-	cbuf_t *b = NULL;
-
-	uint32_t pos;
-	size_t check;
-
-	/* source */
-	const char *i_src_name = "./i_src.bin";
-	i_src_fd = open(i_src_name, i_flags, S_IRUSR | S_IWUSR);
-	Z_die_if(i_src_fd < 1, "open %s", i_src_name);
-	Z_die_if(ftruncate(i_src_fd, i_size), "");
-	Z_die_if(unlink(i_src_name), "");
-	i_src_data = mmap(NULL, i_size, PROT_READ | PROT_WRITE, MAP_SHARED, i_src_fd, 0);
-	Z_die_if(i_src_data == MAP_FAILED, "");
-
-	/* destination */
-	const char *i_dst_name = "./i_dst.bin";
-	i_dst_fd = open(i_dst_name, i_flags, S_IRUSR | S_IWUSR);
-	Z_die_if(i_dst_fd < 1, "open %s", i_dst_name);
-	Z_die_if(ftruncate(i_dst_fd, i_size), "");
-	Z_die_if(unlink(i_dst_name), "");
-	i_dst_data = mmap(NULL, i_size, PROT_READ | PROT_WRITE, MAP_SHARED, i_dst_fd, 0);
-	Z_die_if(i_dst_data == MAP_FAILED, "");
-	
-	/* plumbing */
-	int plumbing[2] = { 0, 0 };
-	Z_die_if(pipe(plumbing), "bad turd-herder");
-
-	/* cbuf 
-		... leave space for header at head of buf */
-	Z_die_if(!(b = cbuf_create(i_size + sizeof(ssize_t), 1)), "");
-
-	/* set source */
-	for (i=0; i < i_size; i++)
-		i_src_data[i] = i;
-	/* splice from source, via cbuf, to data. 
-	CHEAT: use pipe built into cbuf - just note that this
-		approach is NOT thread-safe, just convenient ;)
-		*/
-	check = splice(i_src_fd, NULL, plumbing[1], NULL, i_size, 0);
-	Z_die_if(check != i_size, "splice: src -> pipe");
-
-	/* put into cbuf */
-	pos = cbuf_snd_res_m(b, 1);
-	Z_die_if(pos == -1, "snd reserve");
-	check = cbuf_splice_from_pipe(plumbing[0], b, pos, 0, i_size);
-	Z_die_if(check != i_size, "splice: pipe -> cbuf");
-	cbuf_snd_rls(b);
-
-	/* pull out of cbuf into pipe */
-	pos = cbuf_rcv_res_m(b, 1);
-	Z_die_if(pos == -1, "rcv reserve");
-	check = cbuf_splice_to_pipe(b, pos, 0, plumbing[1]);
-	Z_die_if(check != i_size, "splice: cbuf -> pipe");
-	/* get a handle on cbuf memory so we can check it's contents directly */
-	size_t *head;
-	uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &head);
-	cbuf_rcv_rls(b); /* don't HAVE to release, we won't use cbuf again */
-
-	/* write to destination file, verify data is clean */
-	splice(plumbing[0], NULL, i_dst_fd, NULL, i_size, 0);
-	for (i=0; i < i_size; i++)
-		Z_err_if(i_dst_data[i] != i, "%d,%d", i_dst_data[i], i);
-
-	/* play with data, see what happens */
-	Z_die_if(i_src_data[0] != cbuf_mem_check[0]  /* all same */
-		|| cbuf_mem_check[0] != i_dst_data[0], "src:%d buf:%d dst:%d",
-		i_src_data[0], cbuf_mem_check[0], i_dst_data[0]);
-
-	i_src_data[0] = 9;
-	cbuf_mem_check[0] = 8;
-	i_dst_data[0] = 7;
-
-	Z_die_if(i_src_data[0] == cbuf_mem_check[0]  /* all different */
-		|| cbuf_mem_check[0] == i_dst_data[0], "src:%d buf:%d dst:%d",
-		i_src_data[0], cbuf_mem_check[0], i_dst_data[0]);
-
-out:
-
-	/* clean up cbuf */
-	if (b)
-		cbuf_free(b);
-
-	/* unmap */
-	if (i_src_data && i_src_data != MAP_FAILED)
-		Z_err_if(munmap(i_src_data, i_size), "");
-	if (i_dst_data && i_dst_data != MAP_FAILED)
-		Z_err_if(munmap(i_dst_data, i_size), "");
-
-	/* close FD's */
-	if (i_src_fd)
-		close(i_src_fd);
-	if (i_dst_fd)
-		close(i_dst_fd);
-	/* clean up plumbing */
-	if (plumbing[0])
-		close(plumbing[0]);
-	if (plumbing[1])
-		close(plumbing[1]);
-
-	return err_cnt;
-}
-
+/*	test_p()
+Tests a cbuf_p (aka: cbuf with backing store).
+	*/
 int test_p()
 {
 	int err_cnt = 0;
@@ -320,6 +212,9 @@ out:
 	pthread_exit(NULL);
 }
 
+/*	test_splice()
+src_file ->[tx_thread]-> cbuf ->[rx_thread]-> dst_file
+*/
 int test_splice()
 {
 	int err_cnt = 0;
@@ -342,6 +237,9 @@ out:
 	return err_cnt;
 }
 
+/*	straight_splice()
+Demonstrates use of the Linux-specific splice() call.
+	*/
 int straight_splice()
 {
 	int err_cnt = 0;
@@ -360,7 +258,7 @@ int straight_splice()
 		if (sz_received == -1)
 			break;
 		while (sz_received) {
-			/* NOTE that splice ADVANCES the offset (!). */
+			/* NOTE that splice() ADVANCES the offset (!). */
 			temp = splice(piping[0], NULL, dst_fd, 
 				(loff_t *)&sz_sent, sz_received, 0);
 			Z_die_if(temp == -1, "dst splice size %ld", sz_sent);
@@ -378,6 +276,120 @@ out:
 	return err_cnt;
 }
 
+/*	test_splice_integrity()
+Plays with splice() calls, shows how writes are handled to underlying files.
+	*/
+int test_splice_integrity()
+{
+	const int i_flags = O_RDWR | O_NOATIME | O_CREAT | O_TRUNC | O_NONBLOCK;
+	const int i_size = UINT8_MAX; /* how large a memory region? */
+
+	int err_cnt = 0;
+	int i;
+	int i_src_fd = 0, i_dst_fd = 0;
+	uint8_t *i_src_data = NULL, *i_dst_data = NULL;
+	cbuf_t *b = NULL;
+
+	uint32_t pos;
+	size_t check;
+
+	/* source */
+	const char *i_src_name = "./i_src.bin";
+	i_src_fd = open(i_src_name, i_flags, S_IRUSR | S_IWUSR);
+	Z_die_if(i_src_fd < 1, "open %s", i_src_name);
+	Z_die_if(ftruncate(i_src_fd, i_size), "");
+	Z_die_if(unlink(i_src_name), "");
+	i_src_data = mmap(NULL, i_size, PROT_READ | PROT_WRITE, MAP_SHARED, i_src_fd, 0);
+	Z_die_if(i_src_data == MAP_FAILED, "");
+
+	/* destination */
+	const char *i_dst_name = "./i_dst.bin";
+	i_dst_fd = open(i_dst_name, i_flags, S_IRUSR | S_IWUSR);
+	Z_die_if(i_dst_fd < 1, "open %s", i_dst_name);
+	Z_die_if(ftruncate(i_dst_fd, i_size), "");
+	Z_die_if(unlink(i_dst_name), "");
+	i_dst_data = mmap(NULL, i_size, PROT_READ | PROT_WRITE, MAP_SHARED, i_dst_fd, 0);
+	Z_die_if(i_dst_data == MAP_FAILED, "");
+	
+	/* plumbing */
+	int plumbing[2] = { 0, 0 };
+	Z_die_if(pipe(plumbing), "bad turd-herder");
+
+	/* cbuf 
+		... leave space for header at head of buf */
+	Z_die_if(!(b = cbuf_create(i_size + sizeof(ssize_t), 1)), "");
+
+	/* set source */
+	for (i=0; i < i_size; i++)
+		i_src_data[i] = i;
+	/* source -> pipe */
+	check = splice(i_src_fd, NULL, plumbing[1], NULL, i_size, 0);
+	Z_die_if(check != i_size, "splice: src -> pipe");
+
+	/* pipe -> cbuf */
+	pos = cbuf_snd_res_m(b, 1);
+	Z_die_if(pos == -1, "snd reserve");
+	check = cbuf_splice_from_pipe(plumbing[0], b, pos, 0, i_size);
+	Z_die_if(check != i_size, "splice: pipe -> cbuf");
+	cbuf_snd_rls(b);
+
+	/* cbuf -> pipe */
+	pos = cbuf_rcv_res_m(b, 1);
+	Z_die_if(pos == -1, "rcv reserve");
+	check = cbuf_splice_to_pipe(b, pos, 0, plumbing[1]);
+	Z_die_if(check != i_size, "splice: cbuf -> pipe");
+	/* get a handle on cbuf memory so we can check it's contents directly */
+	size_t *head;
+	uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &head);
+	cbuf_rcv_rls(b); /* don't HAVE to release, we won't use cbuf again */
+
+	/* write to destination file, verify data is clean */
+	splice(plumbing[0], NULL, i_dst_fd, NULL, i_size, 0);
+	for (i=0; i < i_size; i++)
+		Z_err_if(i_dst_data[i] != i, "%d,%d", i_dst_data[i], i);
+
+	/* play with data, see what happens */
+	Z_die_if(i_src_data[0] != cbuf_mem_check[0]  /* all same */
+		|| cbuf_mem_check[0] != i_dst_data[0], "src:%d buf:%d dst:%d",
+		i_src_data[0], cbuf_mem_check[0], i_dst_data[0]);
+
+	i_src_data[0] = 9;
+	cbuf_mem_check[0] = 8;
+	i_dst_data[0] = 7;
+
+	Z_die_if(i_src_data[0] == cbuf_mem_check[0]  /* all different */
+		|| cbuf_mem_check[0] == i_dst_data[0], "src:%d buf:%d dst:%d",
+		i_src_data[0], cbuf_mem_check[0], i_dst_data[0]);
+
+out:
+
+	/* clean up cbuf */
+	if (b)
+		cbuf_free(b);
+
+	/* unmap */
+	if (i_src_data && i_src_data != MAP_FAILED)
+		Z_err_if(munmap(i_src_data, i_size), "");
+	if (i_dst_data && i_dst_data != MAP_FAILED)
+		Z_err_if(munmap(i_dst_data, i_size), "");
+
+	/* close FD's */
+	if (i_src_fd)
+		close(i_src_fd);
+	if (i_dst_fd)
+		close(i_dst_fd);
+	/* clean up plumbing */
+	if (plumbing[0])
+		close(plumbing[0]);
+	if (plumbing[1])
+		close(plumbing[1]);
+
+	return err_cnt;
+}
+
+/*	setup_files()
+Map source and destination files, get lengths, etc.
+	*/
 int setup_files(int argc, char **argv)
 {
 	int err_cnt = 0;
@@ -415,7 +427,6 @@ int main(int argc, char **argv)
 
 	mtsig_util_sigsetup(mtsig_util_handler);
 
-	// TODO: pick between functions
 	switch (argv[1][0]) {
 	case 'r':
 		/* 'regular' mode: just do a splice file -> file 

@@ -16,6 +16,10 @@ cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 {
 	return cbuf_create_(obj_sz, obj_cnt, 0x0);
 }
+cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
+{
+	return cbuf_create_(obj_sz, obj_cnt, CBUF_MALLOC);
+}
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store)
 {
 	cbuf_t *ret = NULL;

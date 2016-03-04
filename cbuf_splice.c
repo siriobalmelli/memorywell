@@ -33,7 +33,7 @@ size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i)
 }
 
 /*	cbuf_splice_from_pipe()
-Pulls at most `size` bytes from `a_pipe[0]` into the cbuf block at `pos`, offset `i`.
+Splice()s at most `size` bytes from `a_pipe[0]` into the cbuf block at `pos`, offset `i`.
 
 In the case that cbuf has a backing store (the block only contains a cbufp_t):
 	The amount of bytes to push is limited to 'blk_iov.iov_len'.
@@ -45,6 +45,9 @@ In the case of a regular cbuf:
 		the cbuf block itself, aka `cbuf_head`.
 	`cbuf_head` may be 0 but will be AT MOST the size of cbuf block (minus 8B).
 	Returns `cbuf_head` - which on error will be 0, NOT -1(!).
+
+In the case of a malloc()ed cbuf, the mechanics are the same but data is read()
+	instead of splice()ed. TODO Robert: implement this case.
 	*/
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size)
 {
@@ -103,6 +106,9 @@ Reads `cbuf_head` (see `cbuf_splice_from_pipe()` above) @(pos +i).
 Splices `*cbuf_head` bytes from the cbuf into `fd_pipe_write`.
 `fd_pipe_write` MUST be a pipe, not a file or mmap'ed region.
 If there is an error will return 0, not -1.
+
+In the case where the cbuf was malloc()ed instead of mmap()ed, does a vmsplice()
+	rather than a splice(). TODO Robert: implement.
 	*/
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 {

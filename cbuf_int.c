@@ -86,13 +86,11 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 		b->sz_bitshift_++;
 	}
 
-	/* MMAP 
-	The fuss with UINT16_MAX is because we only had 16 bits
-		left before the cache line boundary in cbuf_t.
-		*/
+	/* MMAP */
+	// TODO Robert: implement malloc case
 	char tfile[] = "/tmp/cbufXXXXXX";
 	b->mmap_fd = mkostemp(tfile, O_NOATIME);
-	Z_die_if(b->mmap_fd == -1 || b->mmap_fd > UINT16_MAX, "temp");
+	Z_die_if(b->mmap_fd < 1, "mmap '%s'", tfile);
 	/* make space, map */
 	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
 	Z_die_if(ftruncate(b->mmap_fd, len), "");
@@ -128,6 +126,7 @@ void cbuf_free_(cbuf_t *buf)
 	}
 
 	/* free memory */
+	// TODO Robert: handle mmap case
 	if (buf->buf) {
 
 		/* handle backing store (cbufp_) ? */
@@ -235,7 +234,9 @@ The solution is based on the observation that variables change in predictable WA
 	(even if at unpredictable times, in unpredictable amounts).
 
 We want to avoid that a "diff" (act_snd - act_rcv == "unprocessed by rcv")
-	is TOO large: that would keep a checkpoint loop waiting incorrectly.
+	is TOO large: that would keep a checkpoint loop waiting incorrectly
+	(and, if that was the last sender, ENDLESSLY).
+
 Both `act_snd` and `act_rcv` can only increase.
 	But "act_snd++ --> diff++" whereas "act_rcv++ --> diff--".
 	This means: get `act_snd` FIRST.

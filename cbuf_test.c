@@ -35,7 +35,7 @@ int main()
 		OBJ_SZ, OBJ_CNT, (long)NUMITER * THREAD_CNT);
        
 	/* test that a cbuf does in fact go all the way to UINT32_MAX size */
-	uint32_t req_sz = (1 <<31) -1;
+	uint32_t req_sz = (1 <<31) -1; /* Sirio is resigned that this will always give a compile warning */
 	cbuf_t *random = cbuf_create(req_sz, 1);
 	Z_die_if(!random, "buf failed to create");
 	Z_die_if(cbuf_sz_buf(random) != req_sz+1, "buf_sz %u != req_sz %u",

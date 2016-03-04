@@ -23,7 +23,7 @@
 	The only exception to this is the "release_scary(n)" call, which
 		simply releases the first n reserved blocks.
 	Use "scary" ONLY if the thread releasing can guarantee it is
-		the only thread reading from that side of the buffer.
+		the only thread working with that side of the buffer.
 		
 
 	The block state-counts and `positions` are: (`pos` variables move DOWN)
@@ -96,12 +96,17 @@ TERMINOLOGY
 /* effectively a `pthread_yield()` but without having to include threading libraries */
 #define CBUF_YIELD() usleep(1000)
 
-#define CBUF_P		0x01	/* this cbuf contains pointers to the data,
+#define CBUF_P		0x01	/* This cbuf contains pointers to the data,
 					not the data itself.
+				The data is resident in a user-specified (at create-time)
+					"backing store" file, which is mmap()ed.
 					*/
-#define CBUF_MALLOC	0x02	/* This cbuf does NOT have a mmap()'ed backing store. 
-				It cannot be used for splices.
-				TODO: implement
+#define CBUF_MALLOC	0x02	/* This buffer was allocated with malloc() rather than
+					mmap().
+				It may (likely) be on a "transparent hugepage" segment, 
+					courtesy of the kernel.
+				Hugepages are NOT supported for mmap()ed files.
+				TODO Robert: implement
 					*/
 
 #define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.
@@ -148,7 +153,7 @@ typedef struct {
 }__attribute__ ((packed))	cbuf_t;
 
 typedef struct {
-	/* backing store variables: identical for all cbufp_t instances */
+	/* backing store variables: identical values in all blocks of a cbuf_p */
 	int		fd;
 	struct iovec	iov;
 	char		*file_path;
@@ -171,6 +176,7 @@ Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bi
 
 /* create/free */
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
+cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
 void	cbuf_free(cbuf_t *buf);
 

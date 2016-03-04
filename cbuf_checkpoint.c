@@ -38,8 +38,8 @@ Some interesting equations:
 	rcv_pos = "actual receiver" + (rcv_reserved + rcv_uncommitted);
 		"actual receiver" = snd_pos + unused;
 
-The concept is that by (atomically) recording both the "actual receiver"
-	and the DIFFERENCE between that and "actual sender",
+The concept is that by recording both the "actual receiver" and the 
+	DIFFERENCE between that and "actual sender",
 	we create a snapshot that can be compared against a later value of
 	"actual receiver" to see if it has advanced AT LEAST as far as the
 	`diff` value in the snapshot.
