@@ -64,6 +64,11 @@ out:
 	return err_cnt;
 }
 
+/*	test_cbuf_single()
+Tests a single-sender -> single-receiver configuration.
+
+Returns 0 on success.
+	*/
 int test_cbuf_single()
 {
 	int err_cnt = 0;
@@ -88,8 +93,9 @@ int test_cbuf_single()
 		cbuf_rcv_rls(c);
 	}
 
-	cbuf_free(c);
 out:
+	if (c)
+		cbuf_free(c);
 	return err_cnt;
 }
 

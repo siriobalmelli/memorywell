@@ -1,5 +1,13 @@
 #include "cbuf_int.h"
 
+/*
+	Functions for splicing memory in and out of cbuf blocks.
+
+	For background and Linus' approach re: splice() and vmsplice(), please see
+	thread @ http://yarchive.net/comp/linux/splice.html
+*/
+
+
 /*	cbuf_splice_sz()
 
 Returns the SIZE OF SPLICED DATA represented by a cbuf block, 
