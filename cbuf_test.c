@@ -27,6 +27,11 @@ void *rcv_thread(void *args);
 uint64_t global_sum = 0;
 uint64_t expected_sum = 0;
 
+#ifdef Z_BLK_LVL
+#undef Z_BLK_LVL
+#endif
+#define Z_BLK_LVL 1
+
 int main()
 {
 	int err_cnt = 0;
@@ -298,3 +303,6 @@ retry:
 	/* return number of busy-waits we had to go through */
 	pthread_exit((void*)busy_waits);
 }
+
+#undef Z_BLK_LVL
+#define Z_BLK_LVL 0
