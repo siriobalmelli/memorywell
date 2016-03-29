@@ -204,7 +204,7 @@ void cbuf_release__(cbuf_t		*buf,
 /* utterly ignore committed bytes - Shia: JUST DOOOOIIIIT 
 	... returns number of bytes released.
 	*/
-void cbuf_release_scary__(cbuf_t		*buf,
+void cbuf_release_scary__(cbuf_t	*buf,
 			size_t		blk_sz,
 			uint32_t	*reserved,
 			uint32_t	*uncommit,
@@ -221,6 +221,33 @@ void cbuf_release_scary__(cbuf_t		*buf,
 	   e.g.: unused -> ready, ready -> unused
 	   */
 	__atomic_add_fetch(sz_dest, blk_sz, __ATOMIC_SEQ_CST);
+}
+
+/*	cbuf_release_slide__()
+release of only a PARTIAL amount of held reservations. 
+
+NOTES: 
+Depends on caller having gotten "pos_actual" by calling cbuf_actuals__().
+
+TODO: Sirio has no clue whether this is even a working approach
+	*/
+void cbuf_release_slide__(cbuf_t	*buf,
+			size_t		blk_sz,
+			uint32_t	*reserved, 
+			uint32_t	*uncommit, 
+			int64_t		*sz_dest,
+			uint32_t	pos_thr, /* was initial "pos" value did thread have? */
+			uint32_t	pos_actual
+			)
+{
+	/*
+		uncommit += blk_sz;
+		if ((pos & mask) <= "actual") {
+			blk_sz = swap(uncommit, 0);
+			reserved -= blk_sz;
+			sz_dest += blk_sz;
+		}
+		*/
 }
 
 /*	cbuf_actuals__()
@@ -254,19 +281,22 @@ Both values are masked so as to give actual position values.
 	*/
 void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv)
 {
+	/*  Use register as a gimmick to FORCE the order
+		in which variables are loaded.
+		*/
+	register uint32_t reg;
+
 	if (act_snd) {
+		reg = __atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST);
 		__atomic_store_n(act_snd, 
-				(__atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST)
-					+ __atomic_load_n(&buf->sz_ready, __ATOMIC_SEQ_CST) 
-				) & buf->overflow_,
+			(reg + __atomic_load_n(&buf->sz_ready, __ATOMIC_SEQ_CST)) & buf->overflow_,
 			__ATOMIC_SEQ_CST);
 	}
 
 	if (act_rcv) {
+		reg = __atomic_load_n(&buf->sz_unused, __ATOMIC_SEQ_CST);
 		__atomic_store_n(act_rcv, 
-				(__atomic_load_n(&buf->sz_unused, __ATOMIC_SEQ_CST) 
-					+ __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)
-				) & buf->overflow_,
+			(reg + __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)) & buf->overflow_,
 			__ATOMIC_SEQ_CST);
 	}
 }
