@@ -201,8 +201,18 @@ void cbuf_release__(cbuf_t		*buf,
 	}
 }
 
-/* utterly ignore committed bytes - Shia: JUST DOOOOIIIIT 
-	... returns number of bytes released.
+/*	cbuf_release_scary__()
+Utterly ignore committed bytes - Shia: JUST DOOOOIIIIT.
+
+"scary" is usually safe in a single-threaded scenario (i.e.: caller knows 
+	it is the ONLY thread working with that side of the buffer).
+In a multi-threaded setting, "scary" is PROBABLY safe if caller knows
+	it holds the EARLIEST reservation, and only releases
+	the precise quantity that was reserved THAT time (i.e.: caller is tracking 
+	'pos' and 'res_cnt' of EACH of ITS OWN reservations, and only releasing
+	one reservation at a time).
+
+Returns number of bytes released.
 	*/
 void cbuf_release_scary__(cbuf_t	*buf,
 			size_t		blk_sz,
@@ -221,33 +231,6 @@ void cbuf_release_scary__(cbuf_t	*buf,
 	   e.g.: unused -> ready, ready -> unused
 	   */
 	__atomic_add_fetch(sz_dest, blk_sz, __ATOMIC_SEQ_CST);
-}
-
-/*	cbuf_release_slide__()
-release of only a PARTIAL amount of held reservations. 
-
-NOTES: 
-Depends on caller having gotten "pos_actual" by calling cbuf_actuals__().
-
-TODO: Sirio has no clue whether this is even a working approach
-	*/
-void cbuf_release_slide__(cbuf_t	*buf,
-			size_t		blk_sz,
-			uint32_t	*reserved, 
-			uint32_t	*uncommit, 
-			int64_t		*sz_dest,
-			uint32_t	pos_thr, /* was initial "pos" value did thread have? */
-			uint32_t	pos_actual
-			)
-{
-	/*
-		uncommit += blk_sz;
-		if ((pos & mask) <= "actual") {
-			blk_sz = swap(uncommit, 0);
-			reserved -= blk_sz;
-			sz_dest += blk_sz;
-		}
-		*/
 }
 
 /*	cbuf_actuals__()

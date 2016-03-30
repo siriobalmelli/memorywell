@@ -22,8 +22,7 @@
 		in the same order they were reserved.
 	The only exception to this is the "release_scary(n)" call, which
 		simply releases the first n reserved blocks.
-	Use "scary" ONLY if the thread releasing can guarantee it is
-		the only thread working with that side of the buffer.
+	See comments at cbuf_release_scary__().
 		
 
 	The block state-counts and `positions` are: (`pos` variables move DOWN)
@@ -168,6 +167,18 @@ typedef struct {
 	int64_t		diff;
 	int64_t		actual_rcv;
 } cbuf_chk_t;
+
+/* A convenient holder for pertinent reservation data,
+	defined here for convenience of library callers.
+NOT actually used in the library code anywhere.
+TODO: maybe write a "convenience header" with macros or inlines
+	simplifying common cbuf usages?
+	*/
+typedef struct {
+	uint32_t	pos;
+	uint32_t	i;	/* might as well put it here - would have been padding anyways */
+	size_t		res_cnt;
+}__attribute__ ((packed))	cbuf_res_t;
 
 /* compute some basic values out of a cbuf struct */
 Z_INL_FORCE uint32_t cbuf_sz_buf(cbuf_t *b) { return b->overflow_ + 1; }
