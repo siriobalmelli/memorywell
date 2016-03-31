@@ -176,8 +176,8 @@ TODO: maybe write a "convenience header" with macros or inlines
 	*/
 typedef struct {
 	uint32_t	pos;
-	uint32_t	i;	/* might as well put it here - would have been padding anyways */
-	size_t		res_cnt;
+	uint32_t	i;	/* loop iterator (would have been padding anyways) */
+	size_t		size;	/* how many blocks were reserved */
 }__attribute__ ((packed))	cbuf_res_t;
 
 /* compute some basic values out of a cbuf struct */
@@ -189,6 +189,7 @@ Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bi
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
+int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 
 /* reserve */
@@ -208,7 +209,7 @@ void cbuf_rcv_rls_m(cbuf_t *buf, size_t cnt);
 /* sophisticated buffer tricks */
 void		cbuf_snd_rls_mscary(cbuf_t *buf, size_t cnt);
 void		cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt);
-uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
+//uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
 
 /* checkpoint */
 cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b);

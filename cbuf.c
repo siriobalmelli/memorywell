@@ -81,6 +81,26 @@ out:
 	return NULL;
 }
 
+/*	cbuf_zero()
+Zero the entire buffer.
+Has the side effect of pre-faulting a buffer.
+
+returns 0 on success.
+
+Zeroing a buffer that has reserved blocks is considered bad form 
+	and will produce an error.
+*/
+int cbuf_zero(cbuf_t *buf)
+{
+	int err_cnt = 0;
+	Z_die_if(!buf, "no buffer");
+	Z_bail_if((buf->snd_pos + buf->rcv_pos) & buf->overflow_, "buffer occupied");
+
+	memset(buf->buf, 0x0, cbuf_sz_buf(buf));
+out:
+	return err_cnt;
+}
+
 void cbuf_free(cbuf_t *buf)
 {
 	cbuf_free_(buf);
