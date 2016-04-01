@@ -209,7 +209,9 @@ void cbuf_rcv_rls_m(cbuf_t *buf, size_t cnt);
 /* sophisticated buffer tricks */
 void		cbuf_snd_rls_mscary(cbuf_t *buf, size_t cnt);
 void		cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt);
-//uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
+uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
+uint32_t	cbuf_actual_snd(cbuf_t *buf);
+uint32_t	cbuf_actual_rcv(cbuf_t *buf);
 
 /* checkpoint */
 cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b);

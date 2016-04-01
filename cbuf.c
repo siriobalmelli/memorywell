@@ -290,5 +290,19 @@ uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt)
 	return (buf->snd_pos + buf->sz_unused) & buf->overflow_;
 }
 
+uint32_t	cbuf_actual_snd(cbuf_t *buf)
+{
+	uint32_t ret;
+	cbuf_actuals__(buf, &ret, NULL);
+	return ret;
+}
+
+uint32_t	cbuf_actual_rcv(cbuf_t *buf)
+{
+	uint32_t ret;
+	cbuf_actuals__(buf, NULL, &ret);
+	return ret;
+}
+
 #undef Z_BLK_LVL
 #define Z_BLK_LVL 0
