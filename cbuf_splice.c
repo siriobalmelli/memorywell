@@ -1,4 +1,5 @@
 #include "cbuf_int.h"
+#include "unistd.h" 
 
 /*
 	Functions for splicing memory in and out of cbuf blocks.
@@ -56,12 +57,18 @@ In the case of a regular cbuf:
 
 In the case of a malloc()ed cbuf, the mechanics are the same but data is read()
 	instead of splice()ed. TODO Robert: implement this case.
+
+	What we are doing is checking to see if what we are dealing with is a 
+	malloc'ed cbuf.  If so we do the read for that instead of a pipe splice.
+	Makes for simpler coding...
 	*/
+
+/*   size_t	cbuf_read_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size) */
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size)
 {
 	if (!size)
 		return 0;
-	if (size > cbuf_splice_max(b))
+	 if (size > cbuf_splice_max(b))
 		size = cbuf_splice_max(b);
 
 	size_t *cbuf_head;
@@ -85,9 +92,12 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 		fd = b->mmap_fd;
 	}
 
-	/* do splice */
+	/* do the read or the splice depending on the flags */
 	do {
-		*cbuf_head = splice(fd_pipe_read, NULL, fd, &temp_offset, 
+		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P))
+			*cbuf_head = read(fd_pipe_read, b->buf + temp_offset, size);
+		else
+			 *cbuf_head = splice(fd_pipe_read, NULL, fd, &temp_offset, 
 				size, SPLICE_F_NONBLOCK);
 	} while ((*cbuf_head == 0 || *cbuf_head == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
@@ -109,6 +119,20 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 	return *cbuf_head;
 }
 
+
+	/* do splice - keeping this for reference */
+	/* do {
+		if (fd)
+			*cbuf_head = splice(fd_pipe_read, NULL, fd, &temp_offset, 
+				size, SPLICE_F_NONBLOCK);
+		else
+			*cbuf_head = read(fd_pipe_read, 
+	} while ((*cbuf_head == 0 || *cbuf_head == -1) && errno == EWOULDBLOCK 
+		&& !CBUF_YIELD() * don't spinlock * 
+		&& !(errno = 0)); * resets errno ONLY if we will retry *
+	*/
+
+
 /*	cbuf_splice_to_pipe()
 Reads `cbuf_head` (see `cbuf_splice_from_pipe()` above) @(pos +i).
 Splices `*cbuf_head` bytes from the cbuf into `fd_pipe_write`.
@@ -117,12 +141,33 @@ If there is an error will return 0, not -1.
 
 In the case where the cbuf was malloc()ed instead of mmap()ed, does a vmsplice()
 	rather than a splice(). TODO Robert: implement.
-	*/
+	
+size_t	cbuf_vmsplice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
+*/
+/*  RPA - Similary when we are writing to the "TCP" pipe we will either use splice_to_pipe
+ *  or vmsplice depending on how the cbuf was created.  This way we can use the same
+ *  code for the variables we will need. 
+ * 
+ * I am keeping this sig around for reference and some of the code only for this section
+ * for now.
+ * size_t	cbuf_vmsplice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
+ * 
+	do {
+		temp = splice(fd, &temp_offset, fd_pipe_write, 
+				NULL, *cbuf_head, SPLICE_F_NONBLOCK);
+	} while ((temp == 0 || temp == -1) && errno == EWOULDBLOCK 
+		* the below are tested/executed only if we would block: * 
+		&& !CBUF_YIELD() * don't spinlock *
+		&& !(errno = 0)); * resets errno ONLY if we will retry *
+ */
+
+
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 {
 	int fd;
 	size_t *cbuf_head;
 	loff_t temp_offset;
+	struct iovec iov;
 
 	/* params: backing store */
 	if (b->cbuf_flags & CBUF_P) {
@@ -151,9 +196,20 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 		Could return -1 if dest. pipe is full.
 		Have pipe empty before running this, then evacuate pipe.
 		*/
+		/* do the read or splice depending on the flags */
 	ssize_t temp;
+	iov.iov_base = b->buf + temp_offset;                                                  
+        /*   iov[0].iov_len = cbufp_t.iovec.blk_iov.iov_len;i */
+        iov.iov_len = *cbuf_head; 
+
 	do {
-		temp = splice(fd, &temp_offset, fd_pipe_write, 
+	/*  We are running the splice call or vmsplice call depending
+	 *  on the flags given. 
+	*/			
+		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P))
+			temp = vmsplice(fd_pipe_write, &iov, 1, SPLICE_F_GIFT);
+		else 
+			temp = splice(fd, &temp_offset, fd_pipe_write, 
 				NULL, *cbuf_head, SPLICE_F_NONBLOCK);
 	} while ((temp == 0 || temp == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
@@ -168,3 +224,4 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 	/* return */
 	return temp;
 }
+

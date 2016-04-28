@@ -124,7 +124,7 @@ void *splice_tx(void *args)
 	size_t step_sz = 0;
 	int i;
 
-	size_t cbuf_payload = b->overflow_ +1 - sizeof(ssize_t);
+	size_t cbuf_payload = cbuf_splice_max(b);
 	size_t sz_outstanding = 0;
 	size_t temp;
 
@@ -221,6 +221,31 @@ int test_splice()
 
 	/* make cbuf */
 	b = cbuf_create(BLK_SZ, BLK_CNT);
+	Z_die_if(!b, "");
+
+	pthread_t tx_thr = mts_launch(splice_tx, NULL, NULL, NULL);
+	pthread_t rx_thr = mts_launch(splice_rx, NULL, NULL, NULL);
+
+	/*
+	while (!kill_flag)
+		sleep(1);
+		*/
+
+	pthread_join(tx_thr, NULL);
+	pthread_join(rx_thr, NULL);
+out:
+	return err_cnt;
+}
+
+/*	test_splice_malloc()
+src_file ->[tx_thread]-> cbuf(malloc) ->[rx_thread]-> dst_file
+*/
+int test_splice_malloc()
+{
+	int err_cnt = 0;
+
+	/* make cbuf */
+	b = cbuf_create_malloc(BLK_SZ, BLK_CNT);
 	Z_die_if(!b, "");
 
 	pthread_t tx_thr = mts_launch(splice_tx, NULL, NULL, NULL);
@@ -423,7 +448,7 @@ int main(int argc, char **argv)
 {
 	int err_cnt = 0;
 	Z_die_if(argc < 2 || argc > 4, 
-		"usage: %s [r|s|p|i] SOURCE_FILE OUTPUT_FILE", argv[0])
+		"usage: %s [r|s|m|p|i] SOURCE_FILE OUTPUT_FILE", argv[0])
 
 	mtsig_util_sigsetup(mtsig_util_handler);
 
@@ -439,6 +464,11 @@ int main(int argc, char **argv)
 		/* 'splice' mode: splice file -> tx_pipe -> cbuf -> rx_pipe -> file */
 		Z_die_if(setup_files(argc, argv), "");
 		err_cnt += test_splice();
+		break;
+	case 'm':
+		/* 'splice' mode: splice file -> tx_pipe -> cbuf(malloc) -> rx_pipe -> file */
+		Z_die_if(setup_files(argc, argv), "");
+		err_cnt += test_splice_malloc();
 		break;
 	case 'p':
 		/* test backing store */
