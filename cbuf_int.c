@@ -62,7 +62,8 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 {
 	cbuf_t *b = NULL;
 	Z_die_if(!obj_sz, "expecting object size");
-	b = calloc(1, sizeof(cbuf_t));
+	//b = calloc(1, sizeof(cbuf_t));
+	b = cbuf_calloc(1, sizeof(cbuf_t));
 	Z_die_if(!b, "no buf stat");
 	memset(b, 0x0, sizeof(cbuf_t));
 	b->cbuf_flags = flags;

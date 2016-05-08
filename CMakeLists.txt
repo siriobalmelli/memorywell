@@ -1,6 +1,6 @@
 #cbuf library
-add_library(cbuf SHARED cbuf.c cbuf_checkpoint.c cbuf_splice.c cbuf_int.c)
-target_compile_options(cbuf PRIVATE -fPIC)
+add_library(cbuf SHARED cbuf.c cbuf_checkpoint.c cbuf_splice.c cbuf_int.c cbuf_malign.c)
+target_compile_options(cbuf PRIVATE -fPIC -DCBUF_MEM_INTEGRITY)
 
 link_libraries(
 	cbuf
