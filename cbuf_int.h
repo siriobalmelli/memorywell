@@ -2,7 +2,6 @@
 #define cbuf_int_h_
 
 #include "cbuf.h"
-#include "cbuf_malign.h"
 
 /* internals */
 uint32_t next_pow2(uint32_t x);
