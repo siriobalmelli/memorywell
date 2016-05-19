@@ -86,6 +86,16 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 		b->sz_bitshift_++;
 	}
 
+	/* Size assumptions MUST hold true regardless of 
+		whether 'buf' is malloc() || mmap() 
+		*/
+	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
+
+	/* MALLOC */
+	if (b->cbuf_flags & CBUF_MALLOC) {
+		Z_die_if(!(
+			b->buf = malloc(len)
+			), "len = %ld", len);
 	/* MMAP */
 	// TODO Robert: implement malloc case
 	
