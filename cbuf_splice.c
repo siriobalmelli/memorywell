@@ -1,5 +1,4 @@
 #include "cbuf_int.h"
-#include "unistd.h" 
 
 /*
 	Functions for splicing memory in and out of cbuf blocks.
