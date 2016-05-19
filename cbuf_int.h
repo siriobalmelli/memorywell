@@ -36,4 +36,6 @@ uint64_t cbuf_actual_receiver__(cbuf_t *buf,
 			uint64_t	*sz_unused);
 void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv);
 
+const char *cbuf_flags_prn_(uint8_t cbuf_flags);
+
 #endif /* cbuf_int_h_ */

@@ -97,35 +97,28 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 			b->buf = malloc(len)
 			), "len = %ld", len);
 	/* MMAP */
-	// TODO Robert: implement malloc case
-	
-	char tfile[] = "/tmp/cbufXXXXXX";
-	if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P)){
-		Z_inf(3, "Just a print for running a malloc'ed case");
-		size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
-		/* This is a malloc'ed cbuf. We will read and write to the cbuf
-		 * and then vmsplice to the next pipe for sending over the "wire". */
-		/*  I changed this to an int as the cbuf holds pointers not characters in this case. */
-		b->buf = (char *)malloc(len);
-		/*   char tfile[] = "/tmp/cbufXXXXXX"; */
-		Z_die_if((b->buf == NULL), ""); 
 	} else {		
-		Z_die_if(b->cbuf_flags & CBUF_MALLOC, "malloc not implemented");
-		/*   char tfile[] = "/tmp/cbufXXXXXX"; */
-		b->mmap_fd = mkostemp(tfile, O_NOATIME);
-		Z_die_if(b->mmap_fd < 1, "mmap '%s'", tfile);
+		char tfile[] = "/tmp/cbufXXXXXX"; /* only need if mapping */
+		Z_die_if((
+			b->mmap_fd = mkostemp(tfile, O_NOATIME)
+			) < 1, "mmap '%s'", tfile);
 		/* make space, map */
-		size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
-		Z_die_if(ftruncate(b->mmap_fd, len), "");
-		/* MUST be MAP_SHARED. If not, cbuf -> file splices WILL NOT WRITE to disk. */
+		Z_die_if(
+			ftruncate(b->mmap_fd, len)
+			, "");
+		/* MUST be MAP_SHARED. 
+		If not, cbuf -> file splices WILL NOT WRITE to disk. 
+			*/
 		b->buf = mmap(NULL, len, (PROT_READ | PROT_WRITE), 
 			(MAP_SHARED | MAP_LOCKED | MAP_NORESERVE), b->mmap_fd, 0);
-		Z_die_if(b->buf == MAP_FAILED, "sz:%ld", len);
+		Z_die_if(b->buf == MAP_FAILED, "len = %ld", len);
 		Z_die_if(unlink(tfile), "");
  	}
 
-	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d", 
-	     (uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), b->overflow_, b->sz_bitshift_);
+	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d flags='%s'", 
+		(uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), 
+		b->overflow_, b->sz_bitshift_,
+		cbuf_flags_prn_(b->cbuf_flags));
 	return b;
 out:
 	cbuf_free_(b);
@@ -312,6 +305,23 @@ void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv)
 			(reg + __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)) & buf->overflow_,
 			__ATOMIC_SEQ_CST);
 	}
+}
+
+/*	cbuf_flags_prn_()
+Useful utility for showing flag contents in print statements.
+	*/
+const char *cbuf_flags_prn_(uint8_t cbuf_flags)
+{
+	Z_die_if(cbuf_flags > 3, "%d out of range", cbuf_flags);
+	const char *flags[] = {
+		"NONE",
+		"CBUF_P",
+		"CBUF_MALLOC",
+		"CBUF_P | CBUF_MALLOC"
+	};
+	return flags[cbuf_flags];
+out:
+	return NULL;
 }
 
 #undef Z_BLK_LVL
