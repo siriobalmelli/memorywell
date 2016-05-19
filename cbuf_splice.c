@@ -150,28 +150,29 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 	if (*cbuf_head == 0)
 		return 0;
 	if (*cbuf_head > cbuf_splice_max(b)) {
-		Z_err("corrupt splice size of %ld", *cbuf_head);
+		Z_err("corrupt splice size of %ld, max is %ld", 
+			*cbuf_head, cbuf_splice_max(b));
 		return 0;
 	}
-	/* Pull chunk from buffer.
-		Could return -1 if dest. pipe is full.
-		Have pipe empty before running this, then evacuate pipe.
-		*/
-		/* do the read or splice depending on the flags */
-	ssize_t temp;
-	iov.iov_base = b->buf + temp_offset;                                                  
-        /*   iov[0].iov_len = cbufp_t.iovec.blk_iov.iov_len;i */
-        iov.iov_len = *cbuf_head; 
 
+	/* Pull chunk from buffer.
+	Could return -1 if destination pipe is full.
+	Have pipe empty before running this, then evacuate pipe.
+		*/
+	ssize_t temp;
 	do {
-	/*  We are running the splice call or vmsplice call depending
-	 *  on the flags given. 
-	*/			
-		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P))
+		/* if 'buf' was malloc()ed, we must vmsplice() */
+		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P)) {
+			/* set vmsplice-specific variables */
+			iov.iov_base = b->buf + temp_offset;                                                  
+			iov.iov_len = *cbuf_head; 
 			temp = vmsplice(fd_pipe_write, &iov, 1, SPLICE_F_GIFT);
-		else 
+
+		/* all other cases: splice() */
+		} else  {
 			temp = splice(fd, &temp_offset, fd_pipe_write, 
 				NULL, *cbuf_head, SPLICE_F_NONBLOCK);
+		}
 	} while ((temp == 0 || temp == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
 		&& !CBUF_YIELD() /* don't spinlock */
