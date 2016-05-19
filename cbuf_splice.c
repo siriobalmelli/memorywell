@@ -48,21 +48,14 @@ In the case that cbuf has a backing store (the block only contains a cbufp_t):
 	The amount of bytes actually pushed is stored in the 'data_len' variable.
 	data_len is returned but is never less than 0.
 
-In the case of a regular cbuf:
+Otherwise, it's a regular cbuf:
 	The amount of bytes actually pushed is written in the first 8B of 
 		the cbuf block itself, aka `cbuf_head`.
 	`cbuf_head` may be 0 but will be AT MOST the size of cbuf block (minus 8B).
 	Returns `cbuf_head` - which on error will be 0, NOT -1(!).
-
-In the case of a malloc()ed cbuf, the mechanics are the same but data is read()
-	instead of splice()ed. TODO Robert: implement this case.
-
-	What we are doing is checking to see if what we are dealing with is a 
-	malloc'ed cbuf.  If so we do the read for that instead of a pipe splice.
-	Makes for simpler coding...
+NOTE that if 'buf' was malloc()'ed, the mechanics are identical save that 
+	the data is read() instead of splice()ed.
 	*/
-
-/*   size_t	cbuf_read_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size) */
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size)
 {
 	if (!size)
@@ -96,8 +89,9 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P))
 			*cbuf_head = read(fd_pipe_read, b->buf + temp_offset, size);
 		else
-			 *cbuf_head = splice(fd_pipe_read, NULL, fd, &temp_offset, 
+			*cbuf_head = splice(fd_pipe_read, NULL, fd, &temp_offset, 
 				size, SPLICE_F_NONBLOCK);
+	/* ... notice we don't loop on a PARTIAL read/splice */
 	} while ((*cbuf_head == 0 || *cbuf_head == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
 		&& !CBUF_YIELD() /* don't spinlock */
@@ -118,49 +112,17 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 	return *cbuf_head;
 }
 
-
-	/* do splice - keeping this for reference */
-	/* do {
-		if (fd)
-			*cbuf_head = splice(fd_pipe_read, NULL, fd, &temp_offset, 
-				size, SPLICE_F_NONBLOCK);
-		else
-			*cbuf_head = read(fd_pipe_read, 
-	} while ((*cbuf_head == 0 || *cbuf_head == -1) && errno == EWOULDBLOCK 
-		&& !CBUF_YIELD() * don't spinlock * 
-		&& !(errno = 0)); * resets errno ONLY if we will retry *
-	*/
-
-
 /*	cbuf_splice_to_pipe()
-Reads `cbuf_head` (see `cbuf_splice_from_pipe()` above) @(pos +i).
+Reads `cbuf_head` (see `cbuf_splice_from_pipe()` above) @`cbuf_offt(pos, i)`.
 Splices `*cbuf_head` bytes from the cbuf into `fd_pipe_write`.
 `fd_pipe_write` MUST be a pipe, not a file or mmap'ed region.
 If there is an error will return 0, not -1.
 
-In the case where the cbuf was malloc()ed instead of mmap()ed, does a vmsplice()
-	rather than a splice(). TODO Robert: implement.
+In the case where the cbuf was malloc()ed instead of mmap()ed, 
+	does a vmsplice() rather than a splice().
 	
 size_t	cbuf_vmsplice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
-*/
-/*  RPA - Similary when we are writing to the "TCP" pipe we will either use splice_to_pipe
- *  or vmsplice depending on how the cbuf was created.  This way we can use the same
- *  code for the variables we will need. 
- * 
- * I am keeping this sig around for reference and some of the code only for this section
- * for now.
- * size_t	cbuf_vmsplice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
- * 
-	do {
-		temp = splice(fd, &temp_offset, fd_pipe_write, 
-				NULL, *cbuf_head, SPLICE_F_NONBLOCK);
-	} while ((temp == 0 || temp == -1) && errno == EWOULDBLOCK 
-		* the below are tested/executed only if we would block: * 
-		&& !CBUF_YIELD() * don't spinlock *
-		&& !(errno = 0)); * resets errno ONLY if we will retry *
- */
-
-
+	*/
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 {
 	int fd;
@@ -223,4 +185,3 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 	/* return */
 	return temp;
 }
-
