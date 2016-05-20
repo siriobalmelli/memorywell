@@ -81,6 +81,10 @@ out:
 	return NULL;
 }
 
+/* TODO: Robert: implement a cbuf_create_p_malloc() please.
+This includes adding a test for it in cbuf_splice_test.exe
+	*/
+
 /*	cbuf_zero()
 Zero the entire buffer.
 Has the side effect of pre-faulting a buffer.
