@@ -105,7 +105,6 @@ TERMINOLOGY
 				It may (likely) be on a "transparent hugepage" segment, 
 					courtesy of the kernel.
 				Hugepages are NOT supported for mmap()ed files.
-				TODO Robert: implement
 					*/
 
 #define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.

@@ -142,28 +142,27 @@ void cbuf_free_(cbuf_t *buf)
 		cnt = __atomic_load_n(&buf->chk_cnt, __ATOMIC_SEQ_CST);
 	}
 
-	/* free memory */
-	// TODO Robert: handle malloc() case
+	/* if allocated, free buffer */
 	if (buf->buf) {
-		/*  handle the malloc'ed case */
-
-		Z_inf(3, "Just a print for running a malloc'ed case");
-		if (!(buf->cbuf_flags & CBUF_MALLOC && !(buf->cbuf_flags & CBUF_P))){
-			/* handle backing store (cbufp_) ? */
+		/* malloc() is straightforward */
+		if (buf->cbuf_flags & CBUF_MALLOC) {
+			free(buf->buf);
+		/* It must be mmap()'ed.
+		Avoid trying to free a '-1' (aka: MAP_FAILED).
+			*/
+		} else if (buf->buf != MAP_FAILED ) {
+			/* handle backing store (cbufp_) */
 			if (buf->cbuf_flags & CBUF_P) {
-			cbufp_t *f = buf->buf;
-			sbfu_unmap(f->fd, &f->iov);
-			unlink(f->file_path); 
-			free(f->file_path);
-			errno = 0;
+				cbufp_t *f = buf->buf;
+				sbfu_unmap(f->fd, &f->iov);
+				unlink(f->file_path); 
+				free(f->file_path);
+				errno = 0;
 			}
-
-			/* avoid trying to free a '-1' (aka: MAP_FAILED) */
-			if (buf->buf != MAP_FAILED)
-				munmap(buf->buf, next_multiple(cbuf_sz_buf(buf), cbuf_hugepage_sz));
+			munmap(buf->buf, next_multiple(cbuf_sz_buf(buf), cbuf_hugepage_sz));
 		}
-		else	
-			Z_inf(3, "Just a print for running a malloc'ed case");
+		/* in all cases, set 'buf' NULL */
+		buf->buf = NULL;
 	}
 	
 	/* open file descriptors */
