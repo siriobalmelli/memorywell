@@ -12,6 +12,50 @@
 	5:	
 */
 
+/* TODO: ROBERT 
+The problem is that we have a few options when creating a cbuf:
+
+a.) Should 'buf' be malloc()ed or mmap()ed?
+Not sure there should be a default for this.
+I do know that it actually doesn't make much sense to mmap() 'buf' when
+	doing a cbufp (see below).
+
+b.) Should it be a cbuf (data in 'buf') 
+	or cbufp (accounting in 'buf, data in "backing store")?
+Default is cbuf.
+
+c.) If mmap()ed in a.) above, and/or if cbufp in b.), 
+	which directory should contain the temp file
+	(allow the user to choose which filesystem is backing the memory map,
+	see comments above cbuf_create_p() for more info.
+The default (if user doesn't input anything or doesn't care) would be to
+	map in /var/tmp.
+
+Thing is, those 3 otions are mostly orthogonal: the challenge is to have
+	a concise and sensical set of library calls.
+
+This is what I propose. 
+My comments are below each of the function signatures.
+Please take a look and if it makes sense, then implement:
+
+cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+	Default is to create a mmap()ed cbuf.
+	If 'map_dir' is NULL, put it in "/var/tmp" as might be expected with 
+		a POSIX system.
+
+cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
+	Obviously a malloc()ed buffer doesn't need a temp file at all.
+
+cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+	Can't find a case where a cbufp might need 'buf' to mmap()ed, since
+		no splicing is being done in/out of the cbufp_t accounting
+		blocks in 'buf': therefore always malloc() 'buf'.
+	As for the backing store, this must obviously be a file 
+		(can't imagine cbufp is to allow >4GB buffers, noone should
+		be malloc()ing that anyways!), so allow
+		the user to choose which directory it's in.
+*/
+
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 {
 	return cbuf_create_(obj_sz, obj_cnt, 0x0);
@@ -20,6 +64,32 @@ cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
 {
 	return cbuf_create_(obj_sz, obj_cnt, CBUF_MALLOC);
 }
+
+/*	cbuf_create_p()
+Creates a temporary "backing store" mmap()ed to the file path
+	requested by 'backing_store'.
+Any existing file at that path will be overwritten.
+
+Then creates a cbuf which blocks are 'sizeof(cbufp_t)' large,
+	each 'cbuf_t' describes a 'block' of memory mapped IN THE BACKING STORE.
+
+Essentially, each cbuf block is only used as a tracking structure describing 
+	a block in the backing store.
+See description of 'cbufp' in "cbuf.h".
+
+Note that the reason 'backing_store' is user-provided is to allow the user to
+	force backing store creation on a disk of their own choosing.
+This reduces the cost of splice() operation between the backing store 
+	and a destination file on that same file system (essentially,
+	only some filesystem accounting needs to be done).
+
+TODO: Robert, the current 'backing_store' logic is probably wrong:
+	we want to allow the user to specify which DIRECTORY PATH
+	the backing store should be created in, not necessarily what
+	its precise filename should be (I can't think of a case, can you?).
+Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp` 
+	for workable temp file creation mechanism.
+	*/
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store)
 {
 	cbuf_t *ret = NULL;
@@ -38,13 +108,13 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store)
 	/* make accounting structure */
 	cbufp_t f;	
 	memset(&f, 0x0, sizeof(f));
-	/* string masturbation */
+	/* copy file path to (cbufp_t*) */
 	size_t len = strlen(backing_store) + 1;
 	Z_die_if(!(f.file_path = malloc(len)), "");
 	memcpy(f.file_path, backing_store, len);
 
 	/* Map backing store.
-		Typecasts because insidious overflow.
+		Typecasts because of insidious overflow.
 		*/
 	f.iov.iov_len = ((uint64_t)obj_sz * (uint64_t)obj_cnt);
 	Z_die_if(!(f.fd = sbfu_dst_map(&f.iov, f.file_path)), "");
@@ -80,10 +150,6 @@ out:
 	cbuf_free_(ret);
 	return NULL;
 }
-
-/* TODO: Robert: implement a cbuf_create_p_malloc() please.
-This includes adding a test for it in cbuf_splice_test.exe
-	*/
 
 /*	cbuf_zero()
 Zero the entire buffer.
