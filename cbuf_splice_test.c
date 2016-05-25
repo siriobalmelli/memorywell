@@ -23,6 +23,7 @@
 int test_splice_integrity();
 /* 'p' == backing store */
 int test_p();
+int test_p_malloc();
 /* 's' == splice test */
 void *splice_tx(void *args);
 void *splice_rx(void *args);
@@ -38,6 +39,8 @@ int src_fd = 0, dst_fd = 0;
 void *src_buf = NULL, *dst_buf = NULL;
 size_t sz_src = 0, sz_sent = 0;
 cbuf_t *b = NULL;
+//RPA Added for a test
+char *map_dir = "/tmp";
 
 /*	test_p()
 Tests a cbuf_p (aka: cbuf with backing store).
@@ -51,7 +54,77 @@ int test_p()
 	/* make cbufp large enough for entire file */
 	uint32_t cnt = sz_src / BLK_SZ + 1;
 	size_t pkt_sz = BLK_SZ;
-	b = cbuf_create_p(BLK_SZ, cnt, "./temp.bin");
+	// RPA b = cbuf_create_p(BLK_SZ, cnt, "./temp.bin");
+	b = cbuf_create_p(BLK_SZ, cnt, map_dir); 
+	Z_die_if(!b, "");
+
+	uint32_t pos = cbuf_snd_res_m(b, cnt);
+	Z_die_if(pos == -1, "can't reserve %d blocks snd", cnt);
+	size_t i, temp;
+	for (i=0; i < cnt; i++) {
+		/* last packet is smaller is smaller than the stock packet size */
+		if (i == cnt-1)
+			pkt_sz = sz_src - (pkt_sz * (cnt-1));
+
+		/* splice into pipe (increments seek position @ source */
+		temp = splice(src_fd, NULL, plumbing[1], NULL, pkt_sz, 0);
+		Z_die_if(temp != pkt_sz, 
+			"file -> plumbing: temp %ld != pkt_sz %ld @i=%ld",
+			temp, pkt_sz, i);
+
+		/* splice into 'cbuf' (actually, backing store) */
+		temp = cbuf_splice_from_pipe(plumbing[0], b, pos, i, pkt_sz);
+		Z_die_if(temp != pkt_sz, 
+			"plumbing -> cbufp: temp %ld != pkt_sz %ld @i=%ld",
+			temp, pkt_sz, i);
+	}
+	cbuf_snd_rls_m(b, cnt);
+	
+	pos = cbuf_rcv_res_m(b, cnt);
+	pkt_sz = BLK_SZ;
+	Z_die_if(pos == -1, "can't reserve %d blocks rcv", cnt);
+	for (i=0; i < cnt; i++) {
+		/* last packet is smaller is smaller than the stock packet size */
+		if (i == cnt-1)
+			pkt_sz = sz_src - (pkt_sz * (cnt-1));
+
+		/* splice into plumbing */
+		temp = cbuf_splice_to_pipe(b, pos, i, plumbing[1]);
+		Z_die_if(temp != pkt_sz, 
+			"cbuf -> plumbing: temp %ld != pkt_sz %ld @i=%ld", 
+			temp, pkt_sz, i);
+
+		/* splice into destination file.
+		Increments sz_sent as it writes.
+			*/
+		temp = splice(plumbing[0], NULL, dst_fd, (loff_t *)&sz_sent, pkt_sz, 0);
+		Z_die_if(temp != pkt_sz, 
+			"plumbing -> file: temp %ld != pkt_sz %ld @i=%ld", 
+			temp, pkt_sz, i);
+	}
+
+out:
+	if (plumbing[0])
+		close(plumbing[0]);
+	if (plumbing[1])
+		close(plumbing[1]);
+	return err_cnt;
+}
+
+/*	test_p_malloc()
+Tests a cbuf_p in the malloc'ed case (aka: cbuf with backing store).
+	*/
+int test_p_malloc()
+{
+	int err_cnt = 0;
+	int plumbing[2] = { 0, 0 };
+	Z_die_if(pipe(plumbing), "bad turd-herder");
+
+	/* make cbufp large enough for entire file */
+	uint32_t cnt = sz_src / BLK_SZ + 1;
+	size_t pkt_sz = BLK_SZ;
+	// RPA b = cbuf_create_p_malloc(BLK_SZ, cnt, "./temp.bin");
+	b = cbuf_create_p_malloc(BLK_SZ, cnt, map_dir); 
 	Z_die_if(!b, "");
 
 	uint32_t pos = cbuf_snd_res_m(b, cnt);
@@ -220,7 +293,8 @@ int test_splice()
 	int err_cnt = 0;
 
 	/* make cbuf */
-	b = cbuf_create(BLK_SZ, BLK_CNT);
+	// RPA b = cbuf_create(BLK_SZ, BLK_CNT);
+	b = cbuf_create(BLK_SZ, BLK_CNT, map_dir);
 	Z_die_if(!b, "");
 
 	pthread_t tx_thr = mts_launch(splice_tx, NULL, NULL, NULL);
@@ -342,7 +416,7 @@ int test_splice_integrity()
 
 	/* cbuf 
 		... leave space for header at head of buf */
-	Z_die_if(!(b = cbuf_create(i_size + sizeof(ssize_t), 1)), "");
+	Z_die_if(!(b = cbuf_create(i_size + sizeof(ssize_t), 1, map_dir)), "");
 
 	/* set source */
 	for (i=0; i < i_size; i++)
@@ -449,6 +523,10 @@ int main(int argc, char **argv)
 	int err_cnt = 0;
 	Z_die_if(argc < 2 || argc > 4, 
 		"usage: %s [r|s|m|p|i] SOURCE_FILE OUTPUT_FILE", argv[0])
+	// RPA Added for map_dir
+	if (argv[4] != NULL) {
+		map_dir = argv[4];
+	} 
 
 	mtsig_util_sigsetup(mtsig_util_handler);
 
@@ -469,6 +547,11 @@ int main(int argc, char **argv)
 		/* 'splice' mode: splice file -> tx_pipe -> cbuf(malloc) -> rx_pipe -> file */
 		Z_die_if(setup_files(argc, argv), "");
 		err_cnt += test_splice_malloc();
+		break;
+	case 'n':
+		/* test backing store */
+		Z_die_if(setup_files(argc, argv), "");
+		err_cnt += test_p_malloc();
 		break;
 	case 'p':
 		/* test backing store */

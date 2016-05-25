@@ -58,7 +58,8 @@ uint32_t next_multiple(uint32_t x, uint32_t mult)
 
 cbuf_t *cbuf_create_(uint32_t obj_sz, 
 			uint32_t obj_cnt, 
-			uint8_t flags) 
+			uint8_t flags, 
+			char *map_dir) 
 {
 	cbuf_t *b = NULL;
 	Z_die_if(!obj_sz, "expecting object size");
@@ -90,6 +91,7 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 		whether 'buf' is malloc() || mmap() 
 		*/
 	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
+	Z_inf(0, "This is len: %ld What is up!?!?", len);
 
 	/* MALLOC */
 	if (b->cbuf_flags & CBUF_MALLOC) {
@@ -98,10 +100,22 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 			), "len = %ld", len);
 	/* MMAP */
 	} else {		
-		char tfile[] = "/tmp/cbufXXXXXX"; /* only need if mapping */
+		// RPA char tfile[] = "/tmp/cbufXXXXXX"; /* only need if mapping */
+		// Some string manipulation which might not really be needed.  I made
+		// the buffer big enough to hold what I thought would be a safe size.
+		// Let's see....
+		// Test Removal char *tdir = map_dir;
+		char *tdir = "/tmp";
+	        char tfilename[] = "/cbufXXXXXX";
+		char tfile[50];
+		int num = sprintf(tfile, "%s%s", tdir, tfilename);
+		Z_inf(0, "This is map_dir: %s This is tdir: %s", map_dir, tdir);
+		Z_inf(0, "This is num: %d This is tfile: %s", num, tfile);
+                Z_die_if(num < 1, "Not a valid directory file structure.");
 		Z_die_if((
 			b->mmap_fd = mkostemp(tfile, O_NOATIME)
 			) < 1, "mmap '%s'", tfile);
+		Z_inf(0, "before the make space, map");
 		/* make space, map */
 		Z_die_if(
 			ftruncate(b->mmap_fd, len)
@@ -113,8 +127,10 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 			(MAP_SHARED | MAP_LOCKED | MAP_NORESERVE), b->mmap_fd, 0);
 		Z_die_if(b->buf == MAP_FAILED, "len = %ld", len);
 		Z_die_if(unlink(tfile), "");
+		Z_inf(0, "End of else in cbuf_int");
  	}
 
+	Z_inf(0, "Start of info 3");
 	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d flags='%s'", 
 		(uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), 
 		b->overflow_, b->sz_bitshift_,
@@ -127,6 +143,7 @@ out:
 
 void cbuf_free_(cbuf_t *buf)
 {
+	Z_inf(0, "In cbuf_free");
 	/* sanity */
 	if (!buf)
 		return;
@@ -143,6 +160,8 @@ void cbuf_free_(cbuf_t *buf)
 	}
 
 	/* if allocated, free buffer */
+	Z_inf(0, "In if allocated, free buffer");
+	/* sanity */
 	if (buf->buf) {
 		/* malloc() is straightforward */
 		if (buf->cbuf_flags & CBUF_MALLOC) {
@@ -152,6 +171,7 @@ void cbuf_free_(cbuf_t *buf)
 			*/
 		} else if (buf->buf != MAP_FAILED ) {
 			/* handle backing store (cbufp_) */
+			Z_inf(0, "Right b4 freeing, or unmapping a backing store");
 			if (buf->cbuf_flags & CBUF_P) {
 				cbufp_t *f = buf->buf;
 				sbfu_unmap(f->fd, &f->iov);

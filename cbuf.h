@@ -185,9 +185,13 @@ Z_INL_FORCE uint32_t cbuf_sz_obj(cbuf_t *b) { return 1 << b->sz_bitshift_; }
 Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bitshift_; }
 
 /* create/free */
-cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
+// cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
+cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
-cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
+// cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
+cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+// cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
+cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 

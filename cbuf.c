@@ -56,13 +56,15 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 		the user to choose which directory it's in.
 */
 
-cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
+// cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
+cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
-	return cbuf_create_(obj_sz, obj_cnt, 0x0);
+	return cbuf_create_(obj_sz, obj_cnt, 0x0, map_dir);
 }
+// cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
 {
-	return cbuf_create_(obj_sz, obj_cnt, CBUF_MALLOC);
+	return cbuf_create_(obj_sz, obj_cnt, CBUF_MALLOC, NULL);
 }
 
 /*	cbuf_create_p()
@@ -90,13 +92,16 @@ TODO: Robert, the current 'backing_store' logic is probably wrong:
 Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp` 
 	for workable temp file creation mechanism.
 	*/
-cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store)
+// RPA cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store)
+cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	cbuf_t *ret = NULL;
-	Z_die_if(!backing_store, "please provide a path for the backing store");
+	// RPA Z_die_if(!backing_store, "please provide a path for the backing store");
+	Z_die_if(!map_dir, "please provide a path for the backing store");
 
 	/* create cbuf */
-	ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_P);
+	// RPA ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_P);
+	ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_P, map_dir);
 	Z_die_if(!ret, "cbuf create failed");
 	/* cbuf_create_() will have padded the obj size and obj count to 
 		fit  into powers of 2.
@@ -109,9 +114,10 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store)
 	cbufp_t f;	
 	memset(&f, 0x0, sizeof(f));
 	/* copy file path to (cbufp_t*) */
-	size_t len = strlen(backing_store) + 1;
+	// RPA size_t len = strlen(backing_store) + 1;
+	size_t len = strlen(map_dir) + 1;
 	Z_die_if(!(f.file_path = malloc(len)), "");
-	memcpy(f.file_path, backing_store, len);
+	memcpy(f.file_path, map_dir, len);
 
 	/* Map backing store.
 		Typecasts because of insidious overflow.
@@ -150,6 +156,74 @@ out:
 	cbuf_free_(ret);
 	return NULL;
 }
+
+// cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store)
+cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
+{
+	cbuf_t *ret = NULL;
+	Z_die_if(!map_dir, "please provide a path for the backing store");
+
+	/* create cbuf */
+	// RPA ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_MALLOC);
+	ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_MALLOC, NULL);
+	Z_die_if(!ret, "cbuf create failed");
+	/*  cbuf_create_() will have malloc'ed this cbuf but we need to zero out the
+	 * buffer to be sure. This is my understanding at this point for now.... */
+        Z_die_if(!cbuf_zero(ret), "Unable to zero the malloc'ed buffer") 	
+	/* The backing store MUST have sufficient space for EACH cbufp_t in cbuf 
+		to  point to a unique area of `obj_sz` length.
+		*/
+	obj_cnt = cbuf_obj_cnt(ret);	
+
+	/* make accounting structure */
+	cbufp_t f;	
+	memset(&f, 0x0, sizeof(f));
+	/* copy file path to (cbufp_t*) */
+	// RPA size_t len = strlen(backing_store) + 1;
+	size_t len = strlen(map_dir) + 1;
+	Z_die_if(!(f.file_path = malloc(len)), "");
+	// RPA memcpy(f.file_path, backing_store, len);
+	memcpy(f.file_path, map_dir, len);
+
+	/* Map backing store.
+		Typecasts because of insidious overflow.
+		*/
+	f.iov.iov_len = ((uint64_t)obj_sz * (uint64_t)obj_cnt);
+	Z_die_if(!(f.fd = sbfu_dst_map(&f.iov, f.file_path)), "");
+	f.blk_iov.iov_len = obj_sz;
+	f.blk_iov.iov_base = f.iov.iov_base;
+
+	/* populate tracking structures 
+	Go through the motions of reserving cbuf blocks rather than
+		accessing ret->buf directly.
+	This is because cbuf will likely fudge the block size on creation, 
+		and we don't want to care about that.
+		*/
+	uint32_t pos = cbuf_snd_res_m(ret, obj_cnt);
+	Z_die_if(pos == -1, "");
+	cbufp_t *p;
+	for (f.blk_id=0; f.blk_id < obj_cnt; 
+		f.blk_id++, f.blk_iov.iov_base += obj_sz) 
+	{
+		p = cbuf_offt(ret, pos, f.blk_id);
+		memcpy(p, &f, sizeof(f));
+		p->blk_offset = f.blk_iov.iov_base - f.iov.iov_base;
+	};
+	cbuf_snd_rls_m(ret, obj_cnt);
+	/* 'receive' so all blocks are marked as unused */
+	pos = cbuf_rcv_res_m(ret, obj_cnt);
+	Z_die_if(pos == -1, "");
+	cbuf_rcv_rls_m(ret, obj_cnt);
+
+	return ret;
+out:
+	if (f.file_path)
+		free(f.file_path);
+	cbuf_free_(ret);
+	return NULL;
+}
+
 
 /*	cbuf_zero()
 Zero the entire buffer.

@@ -24,6 +24,9 @@ int test_cbuf_threaded(int use_malloc);
 void *snd_thread(void *args);
 void *rcv_thread(void *args);
 
+// RPA added for testing only so all the function signatures matched.
+char *map_dir = "/tmp";
+
 uint64_t global_sum = 0;
 uint64_t expected_sum = 0;
 
@@ -41,7 +44,7 @@ int main()
        
 	/* test that a cbuf does in fact go all the way to UINT32_MAX size */
 	uint32_t req_sz = (1 <<31) -1; /* Sirio is resigned that this will always give a compile warning */
-	cbuf_t *random = cbuf_create(req_sz, 1);
+	cbuf_t *random = cbuf_create(req_sz, 1, map_dir);
 	Z_die_if(!random, "buf failed to create");
 	Z_die_if(cbuf_sz_buf(random) != req_sz+1, "buf_sz %u != req_sz %u",
 		cbuf_sz_buf(random), req_sz+1);
@@ -94,12 +97,14 @@ Re: turns 0 on success.
 	*/
 int test_cbuf_single(int use_malloc)
 {
+	// RPA adding this for testing to force the dir that we want...
 	int err_cnt = 0;
 	cbuf_t *c = NULL;
 	if (use_malloc)
 		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else
-		c = cbuf_create(OBJ_SZ, OBJ_CNT);
+		// RPA c = cbuf_create(OBJ_SZ, OBJ_CNT);
+		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
 	int i;
@@ -133,7 +138,8 @@ int test_cbuf_steps(int use_malloc)
 	if (use_malloc)
 		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else
-		c = cbuf_create(OBJ_SZ, OBJ_CNT);
+		// RPA c = cbuf_create(OBJ_SZ, OBJ_CNT);
+		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
 	int i, j;
@@ -201,7 +207,9 @@ int test_cbuf_threaded(int use_malloc)
 	if (use_malloc)
 		buf = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else 
-		buf = cbuf_create(OBJ_SZ, OBJ_CNT);
+		// RPA buf = cbuf_create(OBJ_SZ, OBJ_CNT);
+		buf = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
+
 	Z_die_if(!buf, "fail to alloc");
 
 	/* launch senders & receivers */

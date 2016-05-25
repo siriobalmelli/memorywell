@@ -9,7 +9,8 @@ uint32_t next_multiple(uint32_t x, uint32_t mult);
 
 cbuf_t *cbuf_create_(	uint32_t obj_sz, 
 			uint32_t obj_cnt, 
-			uint8_t flags);
+			uint8_t flags,
+			char *map_dir);
 
 void	cbuf_free_(cbuf_t *buf);
 
