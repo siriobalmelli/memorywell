@@ -29,7 +29,7 @@ c.) If mmap()ed in a.) above, and/or if cbufp in b.),
 	(allow the user to choose which filesystem is backing the memory map,
 	see comments above cbuf_create_p() for more info.
 The default (if user doesn't input anything or doesn't care) would be to
-	map in /var/tmp.
+	map in /tmp.
 
 Thing is, those 3 otions are mostly orthogonal: the challenge is to have
 	a concise and sensical set of library calls.
@@ -54,6 +54,46 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 		(can't imagine cbufp is to allow >4GB buffers, noone should
 		be malloc()ing that anyways!), so allow
 		the user to choose which directory it's in.
+
+
+USAGE CASES:
+So far, the usage cases and comments on each are as follows:
+
+
+a.) Moving data from a file:
+It should be faster to splice() from [file] to [cbuf], but this can only be done 
+	if [cbuf] is mmap()ed.
+
+[file] -> splice() -> [cbuf] -> splice() -> [socket]
+
+The alternative, if [cbuf] was malloc()ed, is to read(), but this is decidedly slower.
+
+
+b.) Generating new data:
+It should be faster to use a malloc()ed [cbuf] instead of mmap()ed, 
+	when new data is created.
+
+[file] -> read() -> [stack]; [stack] -> encrypt() -> [cbuf] -> vmsplice() -> [socket]
+
+This should be faster because a malloc()ed [cbuf] does NOT have a file on disk 
+	to which the O/S is synchronizing the memory in the background,
+	so we should be avoiding any unnecessary write traffic.
+
+
+c.) Passing/synchronizing data between threads:
+In this case, [cbuf] is used to pass some sort of data between threads, 
+	so there is no splicing involved.
+Each sender reserves some amount of blocks, uses each block like it was 
+	allocated memory, then releases it.
+Each receiver reserves blocks ready to be read, uses each block like 
+	allocated memory (with useful data from the sender), 
+	and then releases the block when it no longer needs the data.
+
+produce_data() -> [cbuf] -> consume_data()
+
+Here, there is NO zero-copy I/O being done, and so the overhead of the O/S 
+	synchronizing data to a mmap()ed file in the background 
+	can be avoided entirely by malloc()ing 'buf'.
 */
 
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
