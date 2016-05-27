@@ -124,7 +124,8 @@ int test_p_malloc()
 	uint32_t cnt = sz_src / BLK_SZ + 1;
 	size_t pkt_sz = BLK_SZ;
 	// RPA b = cbuf_create_p_malloc(BLK_SZ, cnt, "./temp.bin");
-	b = cbuf_create_p_malloc(BLK_SZ, cnt, map_dir); 
+	// TODO: re-enable this - diasbled by Sirio for some quick checking
+	//b = cbuf_create_p_malloc(BLK_SZ, cnt, map_dir); 
 	Z_die_if(!b, "");
 
 	uint32_t pos = cbuf_snd_res_m(b, cnt);

@@ -100,34 +100,11 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 			), "len = %ld", len);
 	/* MMAP */
 	} else {		
-		// RPA char tfile[] = "/tmp/cbufXXXXXX"; /* only need if mapping */
-		// Some string manipulation which might not really be needed.  I made
-		// the buffer big enough to hold what I thought would be a safe size.
-		// Let's see....
-		// Test Removal char *tdir = map_dir;
-		char *tdir = "/tmp";
-	        char tfilename[] = "/cbufXXXXXX";
-		char tfile[50];
-		int num = sprintf(tfile, "%s%s", tdir, tfilename);
-		Z_inf(0, "This is map_dir: %s This is tdir: %s", map_dir, tdir);
-		Z_inf(0, "This is num: %d This is tfile: %s", num, tfile);
-                Z_die_if(num < 1, "Not a valid directory file structure.");
+		struct iovec temp = { NULL, len };
 		Z_die_if((
-			b->mmap_fd = mkostemp(tfile, O_NOATIME)
-			) < 1, "mmap '%s'", tfile);
-		Z_inf(0, "before the make space, map");
-		/* make space, map */
-		Z_die_if(
-			ftruncate(b->mmap_fd, len)
-			, "");
-		/* MUST be MAP_SHARED. 
-		If not, cbuf -> file splices WILL NOT WRITE to disk. 
-			*/
-		b->buf = mmap(NULL, len, (PROT_READ | PROT_WRITE), 
-			(MAP_SHARED | MAP_LOCKED | MAP_NORESERVE), b->mmap_fd, 0);
-		Z_die_if(b->buf == MAP_FAILED, "len = %ld", len);
-		Z_die_if(unlink(tfile), "");
-		Z_inf(0, "End of else in cbuf_int");
+			b->mmap_fd = sbfu_tmp_map(&temp, map_dir)
+			) < 1, "mmap into dir '%s;", map_dir);
+		b->buf = temp.iov_base;
  	}
 
 	Z_inf(0, "Start of info 3");
@@ -179,15 +156,17 @@ void cbuf_free_(cbuf_t *buf)
 				free(f->file_path);
 				errno = 0;
 			}
-			munmap(buf->buf, next_multiple(cbuf_sz_buf(buf), cbuf_hugepage_sz));
+			//munmap(buf->buf, next_multiple(cbuf_sz_buf(buf), cbuf_hugepage_sz));
+			struct iovec temp = { 
+				buf->buf, 
+				next_multiple(buf->overflow_ + 1, cbuf_hugepage_sz)
+			};
+			buf->mmap_fd = sbfu_unmap(buf->mmap_fd, &temp);
 		}
 		/* in all cases, set 'buf' NULL */
 		buf->buf = NULL;
 	}
 	
-	/* open file descriptors */
-	if (buf->mmap_fd)
-		close(buf->mmap_fd);
 	Z_inf(3, "cbuf @0x%lx", (uint64_t)buf);
 	free(buf);
 }
