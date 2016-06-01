@@ -39,8 +39,9 @@ int src_fd = 0, dst_fd = 0;
 void *src_buf = NULL, *dst_buf = NULL;
 size_t sz_src = 0, sz_sent = 0;
 cbuf_t *b = NULL;
-//RPA Added for a test
+//RPA Added for a test locally
 char *map_dir = "/tmp";
+// char *map_dir = "";
 
 /*	test_p()
 Tests a cbuf_p (aka: cbuf with backing store).
@@ -125,7 +126,10 @@ int test_p_malloc()
 	size_t pkt_sz = BLK_SZ;
 	// RPA b = cbuf_create_p_malloc(BLK_SZ, cnt, "./temp.bin");
 	// TODO: re-enable this - diasbled by Sirio for some quick checking
-	//b = cbuf_create_p_malloc(BLK_SZ, cnt, map_dir); 
+	// We actually are doing the checks in one function for both mmap and 
+	// malloc so this function is not used.  Just left for code checking
+	// purposes.
+	// b = cbuf_create_p_malloc(BLK_SZ, cnt, map_dir); 
 	Z_die_if(!b, "");
 
 	uint32_t pos = cbuf_snd_res_m(b, cnt);
@@ -522,12 +526,19 @@ out:
 int main(int argc, char **argv)
 {
 	int err_cnt = 0;
-	Z_die_if(argc < 2 || argc > 4, 
-		"usage: %s [r|s|m|p|i] SOURCE_FILE OUTPUT_FILE", argv[0])
+	// RPA Z_die_if(argc < 2 || argc > 4, 
+	Z_die_if(argc < 2 || argc > 5, 
+		"usage: %s [r|s|m|n|p|i] SOURCE_FILE OUTPUT_FILE", argv[0])
 	// RPA Added for map_dir
-	if (argv[4] != NULL) {
+	/* if (argv[5] != NULL) {
 		map_dir = argv[4];
-	} 
+	} else {
+	        // map_dir = "/var/tmp";	
+	        map_dir = "/tmp";	
+	}
+	*/
+
+	Z_inf(0, "Here is map_dir: %s",	map_dir);
 
 	mtsig_util_sigsetup(mtsig_util_handler);
 

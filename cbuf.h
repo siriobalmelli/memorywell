@@ -191,7 +191,10 @@ cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
 // cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 // cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
-cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+// RPA actually we are not using the below as all the checking for malloc or mmap
+// is being done in one function = see cbuf_create_p  Just left for code checking
+// purposes.
+// cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 

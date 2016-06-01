@@ -171,8 +171,15 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 		'f'.
 		*/
 	f.iov.iov_len = ((uint64_t)obj_sz * (uint64_t)obj_cnt);
-	Z_die_if(!(
+	/* RPA - Making the changes
+	    Z_die_if(!(
 		f.fd = sbfu_dst_map(&f.iov, f.file_path)
+		), "");
+	       
+       	I am assuming for now that calling the sbfu_tmp_map is going
+	to do what we need in any case.... will see	*/
+	Z_die_if(!(
+		f.fd = sbfu_tmp_map(&f.iov, map_dir)
 		), "");
 	f.blk_iov.iov_len = obj_sz;
 	f.blk_iov.iov_base = f.iov.iov_base;
