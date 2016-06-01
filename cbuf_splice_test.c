@@ -31,6 +31,8 @@ int test_splice();
 /* test splice() call */
 int straight_splice();
 
+char *map_dir = NULL;
+
 #define BLK_CNT	1024
 #define BLK_SZ 8192
 
@@ -39,9 +41,6 @@ int src_fd = 0, dst_fd = 0;
 void *src_buf = NULL, *dst_buf = NULL;
 size_t sz_src = 0, sz_sent = 0;
 cbuf_t *b = NULL;
-//RPA Added for a test locally
-char *map_dir = "/tmp";
-// char *map_dir = "";
 
 /*	test_p()
 Tests a cbuf_p (aka: cbuf with backing store).
@@ -526,19 +525,16 @@ out:
 int main(int argc, char **argv)
 {
 	int err_cnt = 0;
-	// RPA Z_die_if(argc < 2 || argc > 4, 
 	Z_die_if(argc < 2 || argc > 5, 
-		"usage: %s [r|s|m|n|p|i] SOURCE_FILE OUTPUT_FILE", argv[0])
-	// RPA Added for map_dir
-	/* if (argv[5] != NULL) {
-		map_dir = argv[4];
-	} else {
-	        // map_dir = "/var/tmp";	
-	        map_dir = "/tmp";	
-	}
-	*/
+		"usage: %s [r|s|m|p|i] SOURCE_FILE OUTPUT_FILE [MAP_DIR]", argv[0])
 
-	Z_inf(0, "Here is map_dir: %s",	map_dir);
+	/* It's not illegal to have this NULL: cbuf library will use
+		'/tmp' as map_dir in that case.
+		*/
+	if (argc == 5)
+		map_dir = argv[4];
+	else
+		map_dir = NULL;
 
 	mtsig_util_sigsetup(mtsig_util_handler);
 
@@ -559,11 +555,6 @@ int main(int argc, char **argv)
 		/* 'splice' mode: splice file -> tx_pipe -> cbuf(malloc) -> rx_pipe -> file */
 		Z_die_if(setup_files(argc, argv), "");
 		err_cnt += test_splice_malloc();
-		break;
-	case 'n':
-		/* test backing store */
-		Z_die_if(setup_files(argc, argv), "");
-		err_cnt += test_p_malloc();
 		break;
 	case 'p':
 		/* test backing store */

@@ -40,7 +40,7 @@ Please take a look and if it makes sense, then implement:
 
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 	Default is to create a mmap()ed cbuf.
-	If 'map_dir' is NULL, put it in "/var/tmp" as might be expected with 
+	If 'map_dir' is NULL, put it in "/tmp" as might be expected with 
 		a POSIX system.
 
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
@@ -137,7 +137,9 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	cbuf_t *ret = NULL;
 	// RPA Z_die_if(!backing_store, "please provide a path for the backing store");
-	Z_die_if(!map_dir, "please provide a path for the backing store");
+	char map_dir_default[] = "/tmp";
+	if (!map_dir)
+		map_dir = map_dir_default;
 
 	/* create cbuf */
 	// RPA ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_P);
