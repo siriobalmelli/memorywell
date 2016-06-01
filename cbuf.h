@@ -235,6 +235,7 @@ Z_INL_FORCE size_t cbuf_splice_max(cbuf_t *b)
 	return cbuf_sz_obj(b) - sizeof(size_t);
 }
 size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i);
+int	cbuf_splice_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t len);
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size);
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write);
 
@@ -258,12 +259,18 @@ Does an offset calculation as in cbuf_offt() above.
 We return an offset value from the base address of `buf->buf`, pointing to the 
 	space immediately following `*head`. 
 Returned offset value is suitable for use with splice() memcpy(), etc.
+
+TODO: explore the crazy idea of putting "head" at the TAIL of the
+	block.
+This would have the advantage of letting senders access a buffer block
+	using cbuf_offt() WHETHER OR NOT it is then splice()d out
+	by the receiver.
 	*/
 Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **head)
 {
 	start_pos += n << buf->sz_bitshift_;
 	loff_t ret = (start_pos & buf->overflow_);
-	*head = buf->buf + ret;
+	*head = buf->buf + ret; /*  add `(1 << buf->sz_bitshift_) - sizeof(ssize_t)` */
 	return ret + sizeof(ssize_t);
 }
 

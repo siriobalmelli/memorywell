@@ -40,6 +40,29 @@ size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i)
 	return ret;
 }
 
+/*	cbuf_splice_set_data_len()
+Explicitly set the length of "usable" data in a cbuf.
+Using this function, caller can directly control 
+	how many bytes will be spliced out of this cbuf block.
+
+returns 0 on success.
+	*/
+int	cbuf_splice_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
+{
+	int err_cnt = 0;
+	Z_die_if(!b, "args");
+	if (b->cbuf_flags & CBUF_P) {
+		((cbufp_t*)cbuf_offt(b, pos, i))->data_len = data_len;
+	} else {
+		size_t *head = NULL;
+		cbuf_lofft(b, pos, i, &head);
+		*head = data_len;
+	}
+
+out:
+	return err_cnt;
+}
+
 /*	cbuf_splice_from_pipe()
 Splice()s at most `size` bytes from `a_pipe[0]` into the cbuf block at `pos`, offset `i`.
 
