@@ -185,16 +185,9 @@ Z_INL_FORCE uint32_t cbuf_sz_obj(cbuf_t *b) { return 1 << b->sz_bitshift_; }
 Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bitshift_; }
 
 /* create/free */
-// cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
-// cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
-// cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store);
-// RPA actually we are not using the below as all the checking for malloc or mmap
-// is being done in one function = see cbuf_create_p  Just left for code checking
-// purposes.
-// cbuf_t *cbuf_create_p_malloc(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 
@@ -265,6 +258,15 @@ TODO: explore the crazy idea of putting "head" at the TAIL of the
 This would have the advantage of letting senders access a buffer block
 	using cbuf_offt() WHETHER OR NOT it is then splice()d out
 	by the receiver.
+
+... then verify every signle reference to "head" in the entire codebase (use 'grep')
+	and:
+	a.) make sure it's derived from calling cbuf_lofft() and NOT cbuf_offt()
+	b.) change it's name to 'data_len' : remove ALL references to "*head" in code
+		as it is now misleading.
+	c.) test (make sure you run valgrind as well)
+	d.) Read through all the comments (especially the splice file) and remove
+		any mention of head's location at the beginning of the block.
 	*/
 Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **head)
 {

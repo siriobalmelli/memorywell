@@ -69,10 +69,12 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 	b->cbuf_flags = flags;
 
 	/* alignment:
-		obj_sz must be a power of 2
+		obj_sz must be able to accomodate an 8B "data_len"
+			variable (add that in),
+			and must then be a power of 2
 		buf_sz must be a multiple of obj_sz AND a power of 2
 		*/
-	obj_sz = next_pow2(obj_sz);
+	obj_sz = next_pow2(obj_sz + sizeof(size_t));
 	uint32_t buf_sz = obj_sz * obj_cnt;
 	buf_sz = next_pow2(next_multiple(buf_sz, obj_sz));
 	Z_err_if(buf_sz == -1, "buffer or object size too big");
