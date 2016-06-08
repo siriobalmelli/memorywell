@@ -54,9 +54,13 @@ int	cbuf_splice_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
 	if (b->cbuf_flags & CBUF_P) {
 		((cbufp_t*)cbuf_offt(b, pos, i))->data_len = data_len;
 	} else {
-		size_t *head = NULL;
+		/* RPA size_t *head = NULL;
 		cbuf_lofft(b, pos, i, &head);
-		*head = data_len;
+		*head = data_len; */
+		size_t *data_len = NULL;
+		cbuf_lofft(b, pos, i, &data_len);
+		// RPA may not be needed but come back and checkout
+		// *head = data_len;
 	}
 
 out:
@@ -74,7 +78,8 @@ In the case that cbuf has a backing store (the block only contains a cbufp_t):
 Otherwise, it's a regular cbuf:
 	The amount of bytes actually pushed is written in the first 8B of 
 		the cbuf block itself, aka `cbuf_head`.
-	`cbuf_head` may be 0 but will be AT MOST the size of cbuf block (minus 8B).
+	// RPA `cbuf_head` may be 0 but will be AT MOST the size of cbuf block (minus 8B).
+	`cbuf_head` may be 0 but will be AT MOST the size of cbuf block.
 	Returns `cbuf_head` - which on error will be 0, NOT -1(!).
 NOTE that if 'buf' was malloc()'ed, the mechanics are identical save that 
 	the data is read() instead of splice()ed.

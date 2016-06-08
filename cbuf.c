@@ -96,12 +96,11 @@ Here, there is NO zero-copy I/O being done, and so the overhead of the O/S
 	can be avoided entirely by malloc()ing 'buf'.
 */
 
-// cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	return cbuf_create_(obj_sz, obj_cnt, 0x0, map_dir);
+
 }
-// cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
 {
 	return cbuf_create_(obj_sz, obj_cnt, CBUF_MALLOC, NULL);
@@ -132,17 +131,14 @@ TODO: Robert, the current 'backing_store' logic is probably wrong:
 Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp` 
 	for workable temp file creation mechanism.
 	*/
-// RPA cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *backing_store)
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	cbuf_t *ret = NULL;
-	// RPA Z_die_if(!backing_store, "please provide a path for the backing store");
 	char map_dir_default[] = "/tmp";
 	if (!map_dir)
 		map_dir = map_dir_default;
 
 	/* create cbuf */
-	// RPA ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_P);
 	ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_P | CBUF_MALLOC, map_dir);
 	Z_die_if(!ret, "cbuf create failed");
 	/* cbuf_create_() will have padded the obj size and obj count to 
@@ -156,7 +152,6 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 	cbufp_t f;	
 	memset(&f, 0x0, sizeof(f));
 	/* copy file path to (cbufp_t*) */
-	// RPA size_t len = strlen(backing_store) + 1;
 	size_t len = strlen(map_dir);
 	Z_die_if(!len, "expecting a parent directory");
 	len++; /* '\0' terminator */
@@ -167,19 +162,8 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 
 	/* Map backing store.
 		Typecasts because of insidious overflow.
-	TODO: change this to be on the pattern used by cbuf_create_(),
-		with the exception that you don't point to a temp "struct iovec"
-		but the ACTUAL and PERSISTENT "struct iovec" contained in
-		'f'.
 		*/
 	f.iov.iov_len = ((uint64_t)obj_sz * (uint64_t)obj_cnt);
-	/* RPA - Making the changes
-	    Z_die_if(!(
-		f.fd = sbfu_dst_map(&f.iov, f.file_path)
-		), "");
-	       
-       	I am assuming for now that calling the sbfu_tmp_map is going
-	to do what we need in any case.... will see	*/
 	Z_die_if(!(
 		f.fd = sbfu_tmp_map(&f.iov, map_dir)
 		), "");

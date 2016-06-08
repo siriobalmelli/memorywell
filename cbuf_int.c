@@ -74,12 +74,38 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 			and must then be a power of 2
 		buf_sz must be a multiple of obj_sz AND a power of 2
 		*/
+        uint32_t saved_obj_sz = obj_sz; 
 	obj_sz = next_pow2(obj_sz + sizeof(size_t));
+	// The ob_sz can overflow so if that is the case we have to 
+	// have the data_len (what was called head) not be a part 
+	// of the buffer...this is 
+	// only a possibility of use at this time.
+	if (obj_sz == 0 || obj_sz == -1) {
+		obj_sz = next_pow2(saved_obj_sz);
+	}
+        
+	// obj_sz = next_pow2(obj_sz);
 	uint32_t buf_sz = obj_sz * obj_cnt;
 	buf_sz = next_pow2(next_multiple(buf_sz, obj_sz));
+
+	if (buf_sz == 0 || buf_sz == -1) {
+		obj_sz = next_pow2(obj_sz - sizeof(size_t));
+		buf_sz = obj_sz * obj_cnt;
+		buf_sz = next_pow2(next_multiple(buf_sz, obj_sz));
+	}
+
 	Z_err_if(buf_sz == -1, "buffer or object size too big");
-	b->overflow_ = buf_sz - 1; /* used as a bitmask later */
+	b->overflow_ = buf_sz - 1; // used as a bitmask later 
 	b->sz_unused = buf_sz;
+	
+
+	// RPA Previous code area
+	// obj_sz = next_pow2(obj_sz);
+	// uint32_t buf_sz = obj_sz * obj_cnt;
+	// buf_sz = next_pow2(next_multiple(buf_sz, obj_sz));
+	// Z_err_if(buf_sz == -1, "buffer or object size too big");
+	// b->overflow_ = buf_sz - 1; /*   used as a bitmask later */
+	// b->sz_unused = buf_sz; 
 
 	/* calc shift value necessary to turn `buf_sz / obj_sz` 
 		into a bitwise op */
@@ -93,7 +119,6 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 		whether 'buf' is malloc() || mmap() 
 		*/
 	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
-	Z_inf(0, "This is len: %ld What is up!?!?", len);
 
 	/* MALLOC */
 	if (b->cbuf_flags & CBUF_MALLOC) {
@@ -122,7 +147,6 @@ out:
 
 void cbuf_free_(cbuf_t *buf)
 {
-	Z_inf(0, "In cbuf_free");
 	/* sanity */
 	if (!buf)
 		return;
@@ -139,7 +163,6 @@ void cbuf_free_(cbuf_t *buf)
 	}
 
 	/* if allocated, free buffer */
-	Z_inf(0, "In if allocated, free buffer");
 	/* sanity */
 	if (buf->buf) {
 		/* malloc() is straightforward */
@@ -150,7 +173,6 @@ void cbuf_free_(cbuf_t *buf)
 			*/
 		} else if (buf->buf != MAP_FAILED ) {
 			/* handle backing store (cbufp_) */
-			Z_inf(0, "Right b4 freeing, or unmapping a backing store");
 			if (buf->cbuf_flags & CBUF_P) {
 				cbufp_t *f = buf->buf;
 				sbfu_unmap(f->fd, &f->iov);

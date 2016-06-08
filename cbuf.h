@@ -259,7 +259,7 @@ This would have the advantage of letting senders access a buffer block
 	using cbuf_offt() WHETHER OR NOT it is then splice()d out
 	by the receiver.
 
-... then verify every signle reference to "head" in the entire codebase (use 'grep')
+... then verify every single reference to "head" in the entire codebase (use 'grep')
 	and:
 	a.) make sure it's derived from calling cbuf_lofft() and NOT cbuf_offt()
 	b.) change it's name to 'data_len' : remove ALL references to "*head" in code
@@ -268,11 +268,13 @@ This would have the advantage of letting senders access a buffer block
 	d.) Read through all the comments (especially the splice file) and remove
 		any mention of head's location at the beginning of the block.
 	*/
-Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **head)
+// RPA Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **head)
+Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **data_len)
 {
 	start_pos += n << buf->sz_bitshift_;
 	loff_t ret = (start_pos & buf->overflow_);
-	*head = buf->buf + ret; /*  add `(1 << buf->sz_bitshift_) - sizeof(ssize_t)` */
+	// RPA *head = buf->buf + ret; /*  add `(1 << buf->sz_bitshift_) - sizeof(ssize_t)` */
+	*data_len = buf->buf + ret; /*  add `(1 << buf->sz_bitshift_) - sizeof(ssize_t)` */
 	return ret + sizeof(ssize_t);
 }
 

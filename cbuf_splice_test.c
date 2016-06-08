@@ -54,7 +54,6 @@ int test_p()
 	/* make cbufp large enough for entire file */
 	uint32_t cnt = sz_src / BLK_SZ + 1;
 	size_t pkt_sz = BLK_SZ;
-	// RPA b = cbuf_create_p(BLK_SZ, cnt, "./temp.bin");
 	b = cbuf_create_p(BLK_SZ, cnt, map_dir); 
 	Z_die_if(!b, "");
 
@@ -123,12 +122,7 @@ int test_p_malloc()
 	/* make cbufp large enough for entire file */
 	uint32_t cnt = sz_src / BLK_SZ + 1;
 	size_t pkt_sz = BLK_SZ;
-	// RPA b = cbuf_create_p_malloc(BLK_SZ, cnt, "./temp.bin");
-	// TODO: re-enable this - diasbled by Sirio for some quick checking
-	// We actually are doing the checks in one function for both mmap and 
-	// malloc so this function is not used.  Just left for code checking
-	// purposes.
-	// b = cbuf_create_p_malloc(BLK_SZ, cnt, map_dir); 
+
 	Z_die_if(!b, "");
 
 	uint32_t pos = cbuf_snd_res_m(b, cnt);
@@ -297,7 +291,6 @@ int test_splice()
 	int err_cnt = 0;
 
 	/* make cbuf */
-	// RPA b = cbuf_create(BLK_SZ, BLK_CNT);
 	b = cbuf_create(BLK_SZ, BLK_CNT, map_dir);
 	Z_die_if(!b, "");
 
@@ -442,8 +435,11 @@ int test_splice_integrity()
 	check = cbuf_splice_to_pipe(b, pos, 0, plumbing[1]);
 	Z_die_if(check != i_size, "splice: cbuf -> pipe");
 	/* get a handle on cbuf memory so we can check it's contents directly */
-	size_t *head;
-	uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &head);
+	// RPA for work on head being put to the end of the buffer 
+	// size_t *head;
+	// uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &head);
+	size_t *data_len;
+	uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &data_len);
 	cbuf_rcv_rls(b); /* don't HAVE to release, we won't use cbuf again */
 
 	/* write to destination file, verify data is clean */
@@ -531,11 +527,11 @@ int main(int argc, char **argv)
 	/* It's not illegal to have this NULL: cbuf library will use
 		'/tmp' as map_dir in that case.
 		*/
-	if (argc == 5)
+/*	if (argc == 5)
 		map_dir = argv[4];
 	else
 		map_dir = NULL;
-
+*/
 	mtsig_util_sigsetup(mtsig_util_handler);
 
 	switch (argv[1][0]) {
