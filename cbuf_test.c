@@ -97,13 +97,11 @@ Re: turns 0 on success.
 	*/
 int test_cbuf_single(int use_malloc)
 {
-	// RPA adding this for testing to force the dir that we want...
 	int err_cnt = 0;
 	cbuf_t *c = NULL;
 	if (use_malloc)
 		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else
-		// RPA c = cbuf_create(OBJ_SZ, OBJ_CNT);
 		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
@@ -138,7 +136,6 @@ int test_cbuf_steps(int use_malloc)
 	if (use_malloc)
 		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else
-		// RPA c = cbuf_create(OBJ_SZ, OBJ_CNT);
 		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
@@ -207,7 +204,6 @@ int test_cbuf_threaded(int use_malloc)
 	if (use_malloc)
 		buf = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else 
-		// RPA buf = cbuf_create(OBJ_SZ, OBJ_CNT);
 		buf = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
 
 	Z_die_if(!buf, "fail to alloc");
