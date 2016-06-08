@@ -32,6 +32,7 @@ int test_splice();
 int straight_splice();
 
 char *map_dir = NULL;
+// char *map_dir = "/tmp";
 
 #define BLK_CNT	1024
 #define BLK_SZ 8192
@@ -292,6 +293,7 @@ int test_splice()
 
 	/* make cbuf */
 	b = cbuf_create(BLK_SZ, BLK_CNT, map_dir);
+	Z_inf(0, "Returned null.");
 	Z_die_if(!b, "");
 
 	pthread_t tx_thr = mts_launch(splice_tx, NULL, NULL, NULL);
@@ -412,7 +414,8 @@ int test_splice_integrity()
 	Z_die_if(pipe(plumbing), "bad turd-herder");
 
 	/* cbuf 
-		... leave space for header at head of buf */
+		RPA ... leave space for header at head of buf 
+		... leave space for header at end of buf */
 	Z_die_if(!(b = cbuf_create(i_size + sizeof(ssize_t), 1, map_dir)), "");
 
 	/* set source */
