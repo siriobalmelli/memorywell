@@ -14,6 +14,10 @@ cbuf_t *cbuf_create_(	uint32_t obj_sz,
 
 void	cbuf_free_(cbuf_t *buf);
 
+/*  TODO: Sirio: review masking return of this function ...	
+No legal value can ever POSSIBLY be other than a multiple of 2,
+	and a bad return value of -1 will NEVER be a power of 2 ;)
+	*/
 uint32_t cbuf_reserve__(cbuf_t		*buf,
 			size_t		blk_sz,
 			int64_t		*sz_source, 
