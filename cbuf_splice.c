@@ -55,12 +55,12 @@ int	cbuf_splice_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
 		((cbufp_t*)cbuf_offt(b, pos, i))->data_len = data_len;
 	} else {
 		/* RPA size_t *head = NULL;
-		cbuf_lofft(b, pos, i, &head);
+	cbuf_lofft(b, pos, i, &head);
 		*head = data_len; */
 		size_t *data_len = NULL;
 		cbuf_lofft(b, pos, i, &data_len);
 		// RPA may not be needed but come back and checkout
-		*data_len = data_len;
+		// *data_len = data_len;
 	}
 
 out:
