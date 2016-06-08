@@ -74,14 +74,16 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 			and must then be a power of 2
 		buf_sz must be a multiple of obj_sz AND a power of 2
 		*/
-        uint32_t saved_obj_sz = obj_sz; 
+        // uint32_t saved_obj_sz = obj_sz; 
 	obj_sz = next_pow2(obj_sz + sizeof(size_t));
 	// The ob_sz can overflow so if that is the case we have to 
 	// have the data_len (what was called head) not be a part 
 	// of the buffer...this is 
 	// only a possibility of use at this time.
 	if (obj_sz == 0 || obj_sz == -1) {
-		obj_sz = next_pow2(saved_obj_sz);
+		Z_inf(0, "We are returning NULL as cbuf could not be created.");
+		return NULL;
+	//	obj_sz = next_pow2(saved_obj_sz);
 	}
         
 	// obj_sz = next_pow2(obj_sz);
