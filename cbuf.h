@@ -75,6 +75,59 @@ TERMINOLOGY
 		- ready (ready for reading).
 		- reserved by receiver fir reading.
 	
+	When dealing with splice() and similar:
+		- 'data_len' is the size_t taking up the TRAILING sizeof(size_t)
+			bytes of a block, OR a dedicated variable in `cbufp_t`.
+		'data_len' gives how many USABLE DATA BYTES in that block.
+
+SCHEMA
+	
+	What follows is a diagram of the cbuf schema for understanding purposes.
+
+cbuf schema 
+
+info:
+n is the number or reserved blocks.  In this case we are using 2 blocks.
+
+obj_sz == 32 (any power of 2 will do)
+sz_bitshift_ == 5 (for a 32 bit obj_sz)
+
+reserve() -> pos
+
+
+
+		buf + pos + (n >> sz_bitshift_)
+		|		0xfa0000 + 128 + (2 << 5) = 0xfa00c0
+		|		|
+*buf = 0xfa0000	|		|
+|		|		|
+|		128	160	192	<- [offsets into memory]
+| ...	...	|	|	|	...	... (rest of buf)
+		pos=128	|	|
+		n=0	n=1	n=2
+		|	|	|
+		|	|	pos + (n << sz_bitshift_)
+		|	|	128 + (2 << 5) = 192
+		|	pos + (n << 5 == 32) = 160
+		pos + (n << 5 == 0) = 128
+		|
+
+
+regarding `pos` overflow:
+
+let's say you have an 8-object cbuf, each block is 32B long.
+(Sample masking for overflow condition, i.e. starting at the beginning of
+ the circular buffer in an overflow condition.)
+
+buf_sz() == 8 * 32 = 256B
+sz_overflow_ == 255
+
+pos & sz_overflow_
+256 & 255 = 0
+
+256 + 32 = 288
+288 & 255 = 32
+
 */
 
 #ifndef _GNU_SOURCE
@@ -272,10 +325,9 @@ This would have the advantage of letting senders access a buffer block
 Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **data_len)
 {
 	start_pos += n << buf->sz_bitshift_;
-	loff_t ret = (start_pos & buf->overflow_);
-	// RPA *head = buf->buf + ret; /*  add `(1 << buf->sz_bitshift_) - sizeof(ssize_t)` */
-	*data_len = buf->buf + ret; /*  add `(1 << buf->sz_bitshift_) - sizeof(ssize_t)` */
-	return ret + sizeof(ssize_t);
+	start_pos &= buf->overflow_;
+	*data_len = buf->buf + start_pos + cbuf_sz_obj(buf) - sizeof(ssize_t);
+	return (loff_t)start_pos;
 }
 
 #endif /* cbuf_h_ */
