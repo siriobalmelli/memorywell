@@ -349,8 +349,8 @@ Z_INL_FORCE size_t cbuf_splice_max(cbuf_t *b)
 	/* if not, subtract the size of a header from `sz_obz` and return this */
 	return cbuf_sz_obj(b) - sizeof(size_t);
 }
-size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i);
-int	cbuf_splice_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t len);
+size_t	cbuf_blk_data_len(cbuf_t *b, uint32_t pos, int i);
+int	cbuf_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t len);
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size);
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write);
 

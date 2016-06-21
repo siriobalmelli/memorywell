@@ -8,29 +8,30 @@
 */
 
 
-/*	cbuf_splice_sz()
+/*	cbuf_blk_data_len()
 
-Returns the SIZE OF SPLICED DATA represented by a cbuf block, 
-	whether the data is in the cbuf itself 
-	or whether it is in a backing store and only tracked by the cbuf block.
+Returns the SIZE OF USABLE DATA in a cbuf block.
+Typically, this is set when splice()ing data into the block,
+	or by calling _set_data_len() directly.
+returns data_len or -1 on error;
 	*/
-size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i)
+size_t	cbuf_blk_data_len(cbuf_t *b, uint32_t pos, int i)
 {
 	size_t ret;
-	/* get base of block being pointed to */
-	void *base = cbuf_offt(b, pos, i);
 
-	/* if this cbuf has a backing store, block is a tracking stuct.
-		Typecast and dereference.
-		*/
-	if (b->cbuf_flags & CBUF_P)
-		ret = ((cbufp_t *)base)->data_len;
+	/* If this cbuf has a backing store, block is a tracking stuct. */
+	if (b->cbuf_flags & CBUF_P) {
+		cbufp_t *f = cbuf_offt(b, pos, i);
+		ret = f->data_len;
 
 	/* Otherwise, data length is in the first 8B of the block itself.
 		Typecast and dereference.
 		*/
-	else
-		ret = *((size_t *)base);
+	} else {
+		size_t *data_len = NULL;
+		cbuf_lofft(b, pos, i, &data_len);
+		ret = *data_len;
+	}
 
 	if (ret > cbuf_splice_max(b)) {
 		Z_err("cbuf 0x%lx pos %d i %d thinks it's size is %ld. likely corrupt.", 
@@ -40,27 +41,24 @@ size_t	cbuf_splice_sz(cbuf_t *b, uint32_t pos, int i)
 	return ret;
 }
 
-/*	cbuf_splice_set_data_len()
-Explicitly set the length of "usable" data in a cbuf.
+/*	cbuf_blk_set_data_len()
+Explicitly set the size of "usable" data in a cbuf.
 Using this function, caller can directly control 
-	how many bytes will be spliced out of this cbuf block.
+	e.g.: how many bytes will be splice()d out of this cbuf block.
 
 returns 0 on success.
 	*/
-int	cbuf_splice_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
+int	cbuf_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
 {
 	int err_cnt = 0;
 	Z_die_if(!b, "args");
 	if (b->cbuf_flags & CBUF_P) {
-		((cbufp_t*)cbuf_offt(b, pos, i))->data_len = data_len;
+		cbufp_t *f = cbuf_offt(b, pos, i);
+		f->data_len = data_len;
 	} else {
-		/* RPA size_t *head = NULL;
-	cbuf_lofft(b, pos, i, &head);
-		*head = data_len; */
-		size_t *data_len = NULL;
-		cbuf_lofft(b, pos, i, &data_len);
-		// RPA may not be needed but come back and checkout
-		// *data_len = data_len;
+		size_t *data_len_buf = NULL;
+		cbuf_lofft(b, pos, i, &data_len_buf);
+		*data_len_buf = data_len;
 	}
 
 out:
@@ -140,15 +138,15 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 }
 
 /*	cbuf_splice_to_pipe()
-Reads `cbuf_head` (see `cbuf_splice_from_pipe()` above) @`cbuf_offt(pos, i)`.
-Splices `*cbuf_head` bytes from the cbuf into `fd_pipe_write`.
-`fd_pipe_write` MUST be a pipe, not a file or mmap'ed region.
-If there is an error will return 0, not -1.
+Reads 'data_len' from the block described by 'pos' and 'i'.
+See cbuf_blk_data_len() for details on where this is located physically.
 
-In the case where the cbuf was malloc()ed instead of mmap()ed, 
-	does a vmsplice() rather than a splice().
-	
-size_t	cbuf_vmsplice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
+splice()s 'data_len' bytes from block into 'fd_pipe_write'.
+`fd_pipe_write` MUST be a pipe, not a file or mmap'ed region.
+
+returns nr. of bytes spliced, 0 on error.
+
+Note: if CBUF_MMAP, vmsplice() is used.
 	*/
 size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 {
