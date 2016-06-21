@@ -68,48 +68,35 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 	memset(b, 0x0, sizeof(cbuf_t));
 	b->cbuf_flags = flags;
 
-	/* alignment:
-		obj_sz must be able to accomodate an 8B "data_len"
-			variable (add that in),
-			and must then be a power of 2
-		buf_sz must be a multiple of obj_sz AND a power of 2
+	uint32_t sz_aligned;
+	/* alignment: obj_sz must be able to accomodate an 8B 'data_len' (add that in),
+		and must then be a power of 2.
 		*/
-	obj_sz = next_pow2(obj_sz + sizeof(size_t));
-	// checks for overflow condition
-	if (obj_sz == 0 || obj_sz == -1) {
-		return NULL;
+	sz_aligned = next_pow2(obj_sz + sizeof(size_t));
+	Z_bail_if(sz_aligned < obj_sz,
+		"aligned obj_sz overflow: obj_sz=%d > sz_aligned=%d",
+		obj_sz, sz_aligned);
+	obj_sz = sz_aligned;
+	/* calc shift value necessary to turn `buf_sz / obj_sz` 
+		into a bitwise op.
+	Use sz_aligned just as a temp variable.
+		*/
+	while (sz_aligned > 1) {
+		sz_aligned >>= 1;
+		b->sz_bitshift_++;
 	}
-        
-	// obj_sz = next_pow2(obj_sz);
+
+	/* 'buf_sz' must be a multiple of obj_sz AND a power of 2 */
 	uint32_t buf_sz = obj_sz * obj_cnt;
-	buf_sz = next_pow2(next_multiple(buf_sz, obj_sz));
-
-	if (buf_sz == 0 || buf_sz == -1) {
-		obj_sz = next_pow2(obj_sz - sizeof(size_t));
-		buf_sz = obj_sz * obj_cnt;
-		buf_sz = next_pow2(next_multiple(buf_sz, obj_sz));
-	}
-
-	Z_err_if(buf_sz == -1, "buffer or object size too big");
+	sz_aligned = next_pow2(next_multiple(buf_sz, obj_sz));
+	Z_bail_if(sz_aligned < buf_sz,
+		"aligned buf_sz overflow: buf_sz=%d > sz_aligned=%d",
+		buf_sz, sz_aligned);
+	buf_sz = sz_aligned;
+	/* assign relevant cbuf_t values derived from 'buf_sz' */
 	b->overflow_ = buf_sz - 1; // used as a bitmask later 
 	b->sz_unused = buf_sz;
 	
-
-	// RPA Previous code area
-	// obj_sz = next_pow2(obj_sz);
-	// uint32_t buf_sz = obj_sz * obj_cnt;
-	// buf_sz = next_pow2(next_multiple(buf_sz, obj_sz));
-	// Z_err_if(buf_sz == -1, "buffer or object size too big");
-	// b->overflow_ = buf_sz - 1; /*   used as a bitmask later */
-	// b->sz_unused = buf_sz; 
-
-	/* calc shift value necessary to turn `buf_sz / obj_sz` 
-		into a bitwise op */
-	uint32_t temp = obj_sz;
-	while (temp > 1) {
-		temp >>= 1;
-		b->sz_bitshift_++;
-	}
 
 	/* Size assumptions MUST hold true regardless of 
 		whether 'buf' is malloc() || mmap() 
@@ -130,7 +117,6 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 		b->buf = temp.iov_base;
  	}
 
-	Z_inf(0, "Start of info 3");
 	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d flags='%s'", 
 		(uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), 
 		b->overflow_, b->sz_bitshift_,
@@ -172,8 +158,6 @@ void cbuf_free_(cbuf_t *buf)
 			if (buf->cbuf_flags & CBUF_P) {
 				cbufp_t *f = buf->buf;
 				sbfu_unmap(f->fd, &f->iov);
-				unlink(f->file_path); 
-				free(f->file_path);
 				errno = 0;
 			}
 			//munmap(buf->buf, next_multiple(cbuf_sz_buf(buf), cbuf_hugepage_sz));
