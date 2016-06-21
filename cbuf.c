@@ -12,7 +12,7 @@
 	5:	
 */
 
-/* TODO: ROBERT 
+/* TODO: Sirio: clean this up
 The problem is that we have a few options when creating a cbuf:
 
 a.) Should 'buf' be malloc()ed or mmap()ed?
@@ -96,7 +96,7 @@ Here, there is NO zero-copy I/O being done, and so the overhead of the O/S
 	can be avoided entirely by malloc()ing 'buf'.
 */
 
-cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
+cbuf_t *cbuf_create1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	return cbuf_create_(obj_sz, obj_cnt, 0x0, map_dir);
 }
@@ -105,7 +105,7 @@ cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
 	return cbuf_create_(obj_sz, obj_cnt, CBUF_MALLOC, NULL);
 }
 
-/*	cbuf_create_p()
+/*	cbuf_create_p1()
 Creates a temporary "backing store" mmap()ed to the file path
 	requested by 'backing_store'.
 Any existing file at that path will be overwritten.
@@ -130,7 +130,7 @@ TODO: Robert, the current 'backing_store' logic is probably wrong:
 Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp` 
 	for workable temp file creation mechanism.
 	*/
-cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
+cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	cbuf_t *ret = NULL;
 

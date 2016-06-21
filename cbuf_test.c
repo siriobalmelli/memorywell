@@ -46,7 +46,7 @@ int main()
 		Manually adjust for the 8B added by cbuf_create().
 		*/
 	uint32_t req_sz = (1UL << 31) - sizeof(size_t) -1;
-	cbuf_t *random = cbuf_create(req_sz, 1, map_dir);
+	cbuf_t *random = cbuf_create1(req_sz, 1, map_dir);
 	Z_die_if(!random, "buf failed to create req_sz=%u", req_sz);
 	Z_die_if(cbuf_sz_buf(random) != req_sz+1+sizeof(size_t),
 		"buf_sz %u != req_sz %lu",
@@ -105,7 +105,7 @@ int test_cbuf_single(int use_malloc)
 	if (use_malloc)
 		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else
-		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
+		c = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
 	int i;
@@ -139,7 +139,7 @@ int test_cbuf_steps(int use_malloc)
 	if (use_malloc)
 		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else
-		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
+		c = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
 	int i, j;
@@ -207,7 +207,7 @@ int test_cbuf_threaded(int use_malloc)
 	if (use_malloc)
 		buf = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else 
-		buf = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
+		buf = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
 
 	Z_die_if(!buf, "fail to alloc");
 

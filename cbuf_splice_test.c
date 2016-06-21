@@ -241,7 +241,7 @@ int test_splice_integrity()
 		hence, cbuf_create() will add 8 to requested 'obj_sz'.
 		*/
 	Z_die_if(!(
-		b = cbuf_create(i_size, 1, map_dir)
+		b = cbuf_create1(i_size, 1, map_dir)
 		), "i_size=%d, map_dir='%s'",
 		i_size, map_dir);
 
@@ -373,7 +373,7 @@ int main(int argc, char **argv)
 		Z_die_if(setup_files(argc, argv), "");
 		/* 'splice' mode: splice file -> tx_pipe -> cbuf -> rx_pipe -> file */
 		Z_die_if(!(
-			b = cbuf_create(BLK_SZ, BLK_CNT, map_dir)
+			b = cbuf_create1(BLK_SZ, BLK_CNT, map_dir)
 			), "BLK_SZ=%d, BLK_CNT=%d, map_dir='%s'",
 			BLK_SZ, BLK_CNT, map_dir);
 		run_splice_test();
@@ -392,7 +392,7 @@ int main(int argc, char **argv)
 		Z_die_if(setup_files(argc, argv), "");
 		/* 'splice' mode: splice file -> tx_pipe -> cbuf(backing store) -> rx_pipe -> file */
 		Z_die_if(!(
-			b = cbuf_create_p(BLK_SZ, BLK_CNT, map_dir)
+			b = cbuf_create_p1(BLK_SZ, BLK_CNT, map_dir)
 			), "BLK_SZ=%d, BLK_CNT=%d, map_dir='%s'",
 			BLK_SZ, BLK_CNT, map_dir);
 		run_splice_test();

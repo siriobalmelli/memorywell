@@ -267,6 +267,9 @@ typedef struct {
 
 /*
 	CBUF_P
+
+TODO: evaluate the idea of cbuf's ALWAYS having a backing store 
+	(whether it be malloc()ed or mmap()ed).
 */
 typedef struct {
 	/* backing store variables: identical values in all blocks of a cbuf_p */
@@ -306,10 +309,17 @@ Z_INL_FORCE uint32_t cbuf_sz_buf(cbuf_t *b) { return b->overflow_ + 1; }
 Z_INL_FORCE uint32_t cbuf_sz_obj(cbuf_t *b) { return 1 << b->sz_bitshift_; }
 Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bitshift_; }
 
-/* create/free */
-cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+/* create/free (with backward-compatible functions) */
+cbuf_t *cbuf_create1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+Z_INL_FORCE cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt) 
+	{ return cbuf_create1(obj_sz, obj_cnt, NULL); }
+
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
-cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+
+cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+Z_INL_FORCE cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt)
+	{ return cbuf_create_p1(obj_sz, obj_cnt, NULL); }
+
 int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 
