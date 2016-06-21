@@ -66,50 +66,45 @@ out:
 }
 
 /*	cbuf_splice_from_pipe()
-Splice()s at most `size` bytes from `a_pipe[0]` into the cbuf block at `pos`, offset `i`.
+Splice()s at most 'size' bytes from 'a_pipe[0]' into the cbuf block at 'pos', offset 'i'.
+Will not splice more than cbuf_splice_max() bytes.
 
-In the case that cbuf has a backing store (the block only contains a cbufp_t):
-	The amount of bytes to push is limited to 'blk_iov.iov_len'.
-	The amount of bytes actually pushed is stored in the 'data_len' variable.
-	data_len is returned but is never less than 0.
+returns 'data_len' == nr. of bytes moved.
+'data_len' may be less than 'size', and is 0 on error.
 
-Otherwise, it's a regular cbuf:
-	The amount of bytes acturally pushed is written in the last 8B of
-		the cbuf block itself now known as `data_len`.
-	`data_len` may be 0 but will be AT MOST the size of cbuf block.
-	Returns `data_len` - which on error will be 0, NOT -1(!).
-NOTE that if 'buf' was malloc()'ed, the mechanics are identical save that 
+'data_len' is saved WITH the block, and can be retrieved with cbuf_blk_data_len().
+
+NOTE that if 'buf' is CBUF_MALLOC, the mechanics are identical save that 
 	the data is read() instead of splice()ed.
 	*/
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size)
 {
-	if (!size)
-		return 0;
-	 if (size > cbuf_splice_max(b))
-		size = cbuf_splice_max(b);
-
-	size_t *data_len;
-	loff_t temp_offset;
-	int fd;
+	size_t *data_len = NULL;
+	loff_t temp_offset = 0;
+	int fd = 0;
 
 	/* splice params: backing store */
 	if (b->cbuf_flags & CBUF_P) {
 		cbufp_t *f = cbuf_offt(b, pos, i);
-
-		/* params */
 		temp_offset = f->blk_offset;
 		data_len = &f->data_len;
 		fd = f->fd; /* fd is the backing store's fd */
 
 	/* params: cbuf block itself as splice destination */
 	} else {
-		/* get head of buffer block, put offset from buf fd info cbuf_off */
-		temp_offset = cbuf_lofft(b, pos, i, &data_len);
-		/* fd is the cbuf itself */
-		fd = b->mmap_fd;
+		temp_offset = cbuf_lofft(b, pos, i, &data_len); /* sets data_len */
+		fd = b->mmap_fd; /* fd is the cbuf itself */
 	}
 
-	/* do the read or the splice depending on the flags */
+	/* validate size of requested splice operation */
+	if (!size) {
+		*data_len = 0;
+		return 0;
+	}
+	 if (size > cbuf_splice_max(b))
+		size = cbuf_splice_max(b);
+
+	/* read() if data is going a malloc()ed 'buf', otherwise splice() */
 	do {
 		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P))
 			*data_len = read(fd_pipe_read, b->buf + temp_offset, size);
@@ -117,15 +112,18 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 			*data_len = splice(fd_pipe_read, NULL, fd, &temp_offset, 
 				size, SPLICE_F_NONBLOCK);
 	/* ... notice we don't loop on a PARTIAL read/splice */
-	} while ((*data_len  == 0 || *data_len == -1) && errno == EWOULDBLOCK 
+	//} while ((*data_len  == 0 || *data_len == -1) && errno == EWOULDBLOCK 
+	} while ((*data_len == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
 		&& !CBUF_YIELD() /* don't spinlock */
 		&& !(errno = 0)); /* resets errno ONLY if we will retry */
 	
 
 	/* if got error, reset to "nothing" */
-	if (*data_len == -1)
+	if (*data_len == -1) {
+		Z_err("splice size=%ld", size);
 		*data_len = 0;
+	}
 	/* We could have spliced an amount LESS than requested.
 	That is not an error: caller should check the return value
 		and act accordingly.
@@ -158,17 +156,14 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 	/* params: backing store */
 	if (b->cbuf_flags & CBUF_P) {
 		cbufp_t *f = cbuf_offt(b, pos, i);
-
 		data_len = &f->data_len;
 		temp_offset = f->blk_offset;
-		fd = f->fd;
+		fd = f->fd; /* fd is backing store */
 
 	/* params: cbuf block itself contains data */
 	} else {
-		/* get offset and head */
 		temp_offset = cbuf_lofft(b, pos, i, &data_len);
-		/* fd is cbuf itself */
-		fd = b->mmap_fd;
+		fd = b->mmap_fd; /* fd is cbuf itself */
 	}
 
 	/* no data, no copy */
@@ -189,8 +184,8 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 		/* if 'buf' was malloc()ed, we must vmsplice() */
 		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P)) {
 			/* set vmsplice-specific variables */
-			iov.iov_base = b->buf + temp_offset;                                                  
-			iov.iov_len = *data_len; 
+			iov.iov_base = b->buf + temp_offset;
+			iov.iov_len = *data_len;
 			temp = vmsplice(fd_pipe_write, &iov, 1, SPLICE_F_GIFT);
 
 		/* all other cases: splice() */
@@ -198,15 +193,17 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 			temp = splice(fd, &temp_offset, fd_pipe_write, 
 				NULL, *data_len, SPLICE_F_NONBLOCK);
 		}
-	} while ((temp == 0 || temp == -1) && errno == EWOULDBLOCK 
+	} while ((temp == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
 		&& !CBUF_YIELD() /* don't spinlock */
 		&& !(errno = 0)); /* resets errno ONLY if we will retry */
 
 	/* haz error? */
-	if (temp == -1)
+	if (temp == -1) {
 		temp = 0;
-	Z_err_if(temp != *data_len, "temp %ld; *data_len %ld", temp, *data_len);
+		Z_err("data_len=%lu", *data_len);
+	}
+	//Z_err_if(temp != *data_len, "temp %ld; *data_len %ld", temp, *data_len);
 
 	/* return */
 	return temp;
