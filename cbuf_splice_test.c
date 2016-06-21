@@ -58,7 +58,6 @@ void *splice_tx(void *args)
 	size_t step_sz = 0;
 	int i;
 
-	size_t cbuf_payload = cbuf_splice_max(b);
 	size_t sz_outstanding = 0;
 	size_t temp;
 
@@ -68,14 +67,14 @@ void *splice_tx(void *args)
 		if (sz_outstanding == -1)
 			break;
 		while (sz_outstanding) {
-			step_sz = (sz_outstanding >> b->sz_bitshift_) +1;
+			step_sz = sz_outstanding / cbuf_splice_max(b) + 1;
 			pos = cbuf_snd_res_m_cap(b, &step_sz);
 			if (pos == -1) {
 				pthread_yield();
 				continue;
 			}
 			for (i = 0; i < step_sz; i++) {
-				temp = cbuf_splice_from_pipe(fittings[0], b, pos, i, cbuf_payload);
+				temp = cbuf_splice_from_pipe(fittings[0], b, pos, i, sz_outstanding);
 				sz_outstanding -= temp;
 				sz_pushed += temp;
 			}
@@ -115,7 +114,7 @@ void *splice_rx(void *args)
 
 	while (sz_sent < sz_src && !kill_flag) {
 		/* get buffer chunks, dump them all into local pipe */
-		step_sz = ((sz_src - sz_sent) >>b->sz_bitshift_) + 1;
+		step_sz = (sz_src - sz_sent) / cbuf_splice_max(b) + 1;
 		pos = cbuf_rcv_res_m_cap(b, &step_sz);
 		if (pos == -1) {
 			pthread_yield();
@@ -135,8 +134,9 @@ void *splice_rx(void *args)
 	}
 
 out:
-	/* don't set kill_flag - 
-	   rely on sender to checkpoint when the buffer is cleaned up */
+	/* Don't set kill_flag unless there was an error.
+	TX will checkpoint() to make sure we have consumed everything.
+		*/
 	kill_flag += err_cnt;
 	if (fittings[0])
 		close(fittings[0]);
