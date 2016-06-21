@@ -3,7 +3,10 @@
 
 /* cbuf - thread-safe circular buffer 
 
-	Built to cope with:
+
+INTRODUCTION
+
+	This circular buffer library is built to cope with:
 		- arbitrary object sizes
 		- multiple senders, multiple receivers
 
@@ -12,7 +15,7 @@
 	Reserved blocks are exclusively held until they are released.
 	Once released, they available for the 'other side' to reserve and utilize.
 
-	The only caveat is the case where multiple threads all have blocks
+	The only caveat is the case where multiple threads have blocks
 		reserved on one side (either senders or receivers).
 	In this case, blocks released by one thread become 'uncommitted'
 		until ALL threads have released their reserved blocks, 
@@ -25,48 +28,29 @@
 	See comments at cbuf_release_scary__().
 		
 
-	The block state-counts and `positions` are: (`pos` variables move DOWN)
+NOMENCLATURE
 
-		- rcv_reserved | [rcv_uncommitted]
-	<< rcv_pos >>
-		- ready (available for receiver)
-		- snd_reserved | [snd_uncommitted]
-	<< snd_pos >>
-		- unused (available for sender)
+	The "buffer" is a block of memory which can be reserved
+		and access in a circular fashion by callers.
+	This is the variable 'buf'.
 
-	... at creation time, all blocks are `unused`.
+	A "block" refers to a contiguous chunk of bytes which can be
+		"reserved" or "released" in a circular buffer.
+	The buffer evenly divides into blocks.
+	All blocks have the same size, which must be a power of 2, and
+		is expressed as 'sz_bitshift_'.
+		NOTE that 'sz_bitshift_' is a SHIFT COUNT and NOT a size.
+	A block is identified using the variables 'pos' and 'n',
+		which mean "start of a reserved sequence of blocks"
+		and "nth block in the reserved sequence".
 
+	'cbuf' is the 64B structure which contains the variables used to
+		track reservation and releasing of blocks.
+	This is done in a lock-free fashion, which is performant even
+		under heavy contention (many threads reserving or releasing).
+	This is usually the variable 'cb'.
 
-cbufp_ == CBUF of Pointers
-
-	cbuf's have the following limitations:
-	a.) They are limited to UINT32_MAX in size
-	b.) Caller has no control over where cbuf mmap()s it's backing store
-	c.) cbuf's backing store is memory-locked (kernel not allowed to page).
-
-	To overcome these without compromising the design of cbuf itself,
-		there is cbufp_.
-
-	Essentially, a file is mmap()'ed at a path of the caller's choosing.
-		Let's call this file the "backing store".
-	Then a separate cbuf is created, it's blocks containing only
-		accounting data and pointers into the backing store.
-
-	The splice() operations on the cbuf see a flag in cbuf_t and do I/O
-		from the backing store instead of the cbuf_t's memory.
-
-	WARNING:
-	cbufp_ ONLY WORKS with the splice() calls. 
-	Writing into any of the blocks in the cbuf erases the necessary 
-		accounting structs and likely overflows into neighboring blocks.
-
-
-TERMINOLOGY
-
-	The terms "block" "obj" and "object" are used interchangeably to
-		refer to an area of memory which can be "reserved" or "released"
-		in a circular buffer.
-	The connotation is that cbuf doesn't care what's in that memory,
+	The approach is that 'cbuf' doesn't care what's in 'buffer',
 		simply what it's size is and wheather it's in any one of
 		the following states:
 
@@ -75,42 +59,112 @@ TERMINOLOGY
 		- ready (ready for reading).
 		- reserved by receiver fir reading.
 	
-	When dealing with splice() and similar:
+	NOTE: when dealing with splice() and similar:
 		- 'data_len' is the size_t taking up the TRAILING sizeof(size_t)
 			bytes of a block, OR a dedicated variable in `cbufp_t`.
-		'data_len' gives how many USABLE DATA BYTES in that block.
+		- 'data_len' gives how many USABLE DATA BYTES in that block.
 
-SCHEMA
+
+CBUF
+
+	The principles behind lock-free buffer reservation are:
 	
-	What follows is a diagram of the cbuf schema for understanding purposes.
+	a.) A "state-count" (e.g.: how many bytes are "available")
+		can be atomically decremented with the number of requested bytes.
+	If the result of this operation is positive (>0), then we have 
+		a de-facto "reservation".
 
-cbuf schema 
+	b.) There is no sequential constraint between obtaining a "reservation"
+		and atomically increating a "position" variable, which
+		tells us WHERE that reservation begins.
+	
+	c.) If sizes are properly aligned and position variables are
+		unsigned integers, the "circular" aspect of the buffer
+		(when reaching the end, going back to the beginning)
+		can be implemented with masking and hardware overflow 
+		of position variables.
 
-info:
-n is the number or reserved blocks.  In this case we are using 2 blocks.
+	The "state-counts" and "position" variables are: 
+		(in this illustration, 'pos' variables move DOWN)
 
-obj_sz == 32 (any power of 2 will do)
-sz_bitshift_ == 5 (for a 32 bit obj_sz)
+				- rcv_reserved | [rcv_uncommitted]
+			<< rcv_pos >>
+				- ready (available for receiver)
+				- snd_reserved | [snd_uncommitted]
+			<< snd_pos >>
+				- unused (available for sender)
 
-reserve() -> pos
+	At creation time, all blocks are in the "unused" state.
 
 
+CBUF_P flag == CBUF of Pointers
 
-		buf + pos + (n >> sz_bitshift_)
-		|		0xfa0000 + 128 + (2 << 5) = 0xfa00c0
-		|		|
-*buf = 0xfa0000	|		|
-|		|		|
-|		128	160	192	<- [offsets into memory]
-| ...	...	|	|	|	...	... (rest of buf)
-		pos=128	|	|
+	A cbuf can be created which does not itself contain data, 
+		but only small (128B) tracking structures (cbufp_t).
+	These tracking structures in turn point to a mmmap()ed temporary file
+		which contains ONLY DATA.
+
+	This is useful when performing zero-copy I/O (the "splice" family of calls),
+		as data which must be updated (e.g.: 'data_len') does not
+		reside alongside data being splice()d.
+	This is also useful as it removes the cbuf limitation of 2^32B size,
+		allowing very large files buffers.
+
+	WARNING:
+	CBUF_P is ONLY intended for use with the "splice" family of calls. 
+	Directly writing into any of the blocks erases accounting data
+		which points to the backing store.
+
+
+CBUF_MALLOC flag
+
+	The "buffer" in a cbuf is usually mmap()ed, so as to allow
+		zero-copy I/O ("splice" calls) to be performed into and out of it.
+
+	However, it is possible to have "buffer" allocated using malloc()
+		instead.
+
+	This can be advantageous in some circumstances, e.g.: because the
+		kernel will use transparent hugepages for malloc()ed regions,
+		where mmap()ed areas must have a 4k page size.
+
+	Look at the internals for the "splice" family of calls for more details.
+
+
+ILLUSTRATION
+	
+	Here is an example of the various cbuf values in action.
+	See NOMENCLATURE above for definition of the parameter names.
+
+	'obj_sz' == 32 (any power of 2 will do), which means that
+		'sz_bitshift_' == 5.
+	'n' is a number of reserved blocks. Here, we have reserved 3 blocks.
+	'buf' is a random base addess chosen
+
+reserve(n) -> pos
+reserve(3) -> 128
+
+		pos=128 (beginning of reservation)
+		|
+		|	buf + pos + (n >> sz_bitshift_)
+		|	|
+		|	|	0xfa00 + 128 + (2 << 5) = 0xfac0
+		|	|	|
+*buf=0xfa00	|	|	|
+|		|	|	|
+|		128	160	192	<- [offsets into buf aka 'pos']
+|		|	|	|
+-------------------------------------------------------------------------
+| (memory) ...	|	|	|	...	... (rest of buf)	|
+-------------------------------------------------------------------------
+		|	|	|
 		n=0	n=1	n=2
 		|	|	|
-		|	|	pos + (n << sz_bitshift_)
 		|	|	128 + (2 << 5) = 192
-		|	pos + (n << 5 == 32) = 160
-		pos + (n << 5 == 0) = 128
+		|	|
+		|	128 + (1 << 5) = 160
 		|
+		128 + (0 << 5) = 128
 
 
 regarding `pos` overflow:
@@ -127,7 +181,6 @@ pos & sz_overflow_
 
 256 + 32 = 288
 288 & 255 = 32
-
 */
 
 #ifndef _GNU_SOURCE
@@ -145,9 +198,13 @@ pos & sz_overflow_
 #include "sbfu.h" /* for backing store operations: cbufp_ only */
 #include "zed_dbg.h"
 
-/* effectively a `pthread_yield()` but without having to include threading libraries */
-#define CBUF_YIELD() usleep(1000)
 
+/*
+	DEFINES	
+*/
+#define CBUF_YIELD() usleep(1000)	/* Effectively a pthread_yield(),
+					without including threading libraries.
+						*/
 #define CBUF_P		0x01	/* This cbuf contains pointers to the data,
 					not the data itself.
 				The data is resident in a user-specified (at create-time)
@@ -164,6 +221,10 @@ pos & sz_overflow_
 					This is the high bit in `chk_cnt` below.
 						*/
 
+
+/*
+	CBUF	
+*/
 typedef struct {
 	void		*buf;		/* Contiguous block of memory over which
 						the circular buffer iterates.
@@ -203,34 +264,42 @@ typedef struct {
 	uint32_t	unused;		/* pad out to 64B cache line */
 }__attribute__ ((packed))	cbuf_t;
 
+
+/*
+	CBUF_P
+*/
 typedef struct {
 	/* backing store variables: identical values in all blocks of a cbuf_p */
 	int		fd;
+	int		pad_int;
 	struct iovec	iov;
-	char		*file_path;
 	/* block-specific variables: different from block to block */
 	uint64_t	blk_id;
 	struct iovec	blk_iov;
 	loff_t		blk_offset;
 	size_t		data_len;
-} cbufp_t;
+}__attribute__ ((packed))	cbufp_t;
 
+
+/*
+	CHECKPOINTS
+*/
 typedef struct {
 	int64_t		diff;
 	int64_t		actual_rcv;
 } cbuf_chk_t;
 
+
 /* A convenient holder for pertinent reservation data,
 	defined here for convenience of library callers.
 NOT actually used in the library code anywhere.
-TODO: maybe write a "convenience header" with macros or inlines
-	simplifying common cbuf usages?
 	*/
 typedef struct {
 	uint32_t	pos;
 	uint32_t	i;	/* loop iterator (would have been padding anyways) */
 	size_t		size;	/* how many blocks were reserved */
 }__attribute__ ((packed))	cbuf_res_t;
+
 
 /* compute some basic values out of a cbuf struct */
 Z_INL_FORCE uint32_t cbuf_sz_buf(cbuf_t *b) { return b->overflow_ + 1; }
@@ -287,7 +356,7 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write);
 
 /*	cbuf_offt()
 Deliver the memory address at the beginning of the nth in a 
-	contiguous set of buffer blocks which starts at `pos`.
+	contiguous set of buffer blocks which starts at 'pos'.
 The contiguous set of buffer blocks may exist partly at the end of the
 	buffer memory block, and the rest of the way starting at the beginning.
 This function exists to hide the masking necessary to roll over from the end to

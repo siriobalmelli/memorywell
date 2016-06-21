@@ -99,7 +99,6 @@ Here, there is NO zero-copy I/O being done, and so the overhead of the O/S
 cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	return cbuf_create_(obj_sz, obj_cnt, 0x0, map_dir);
-
 }
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
 {
@@ -134,31 +133,20 @@ Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp`
 cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	cbuf_t *ret = NULL;
-	char map_dir_default[] = "/tmp";
-	if (!map_dir)
-		map_dir = map_dir_default;
 
 	/* create cbuf */
 	ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_P | CBUF_MALLOC, map_dir);
 	Z_die_if(!ret, "cbuf create failed");
 	/* cbuf_create_() will have padded the obj size and obj count to 
-		fit  into powers of 2.
+		fit into powers of 2.
 	The backing store MUST have sufficient space for EACH cbufp_t in cbuf 
-		to  point to a unique area of `obj_sz` length.
+		to point to a unique area of `obj_sz` length.
 		*/
 	obj_cnt = cbuf_obj_cnt(ret);	
 
 	/* make accounting structure */
 	cbufp_t f;	
 	memset(&f, 0x0, sizeof(f));
-	/* copy file path to (cbufp_t*) */
-	size_t len = strlen(map_dir);
-	Z_die_if(!len, "expecting a parent directory");
-	len++; /* '\0' terminator */
-	Z_die_if(!(
-		f.file_path = malloc(len)
-		), "");
-	memcpy(f.file_path, map_dir, len);
 
 	/* Map backing store.
 		Typecasts because of insidious overflow.
@@ -194,8 +182,6 @@ cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 
 	return ret;
 out:
-	if (f.file_path)
-		free(f.file_path);
 	cbuf_free_(ret);
 	return NULL;
 }
