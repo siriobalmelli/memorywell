@@ -369,33 +369,19 @@ Z_INL_FORCE void *cbuf_offt(cbuf_t *buf, uint32_t start_pos, uint32_t n)
 }
 
 /*	cbuf_lofft()
-Does an offset calculation as in cbuf_offt() above.
-`*head` is set to the start of the memory region, where we store a "length" variable.
-We return an offset value from the base address of `buf->buf`, pointing to the 
-	space immediately following `*head`. 
-Returned offset value is suitable for use with splice() memcpy(), etc.
+Deliver the OFFSET between 'buf->buf' and the beginning of the nth in a
+	contiguous set of blocks which starts at 'pos'.
 
-TODO: explore the crazy idea of putting "head" at the TAIL of the
-	block.
-This would have the advantage of letting senders access a buffer block
-	using cbuf_offt() WHETHER OR NOT it is then splice()d out
-	by the receiver.
+This offset value is useful when calling splice().
 
-... then verify every single reference to "head" in the entire codebase (use 'grep')
-	and:
-	a.) make sure it's derived from calling cbuf_lofft() and NOT cbuf_offt()
-	b.) change it's name to 'data_len' : remove ALL references to "*head" in code
-		as it is now misleading.
-	c.) test (make sure you run valgrind as well)
-	d.) Read through all the comments (especially the splice file) and remove
-		any mention of head's location at the beginning of the block.
+Also, point '*data_len' to the last 8B of the block.
+'data_len' will hold e.g.: the results of a splice() call.
 	*/
-// RPA Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **head)
 Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **data_len)
 {
 	start_pos += n << buf->sz_bitshift_;
 	start_pos &= buf->overflow_;
-	*data_len = buf->buf + start_pos + cbuf_sz_obj(buf) - sizeof(ssize_t);
+	*data_len = buf->buf + (uint64_t)start_pos + (uint64_t)cbuf_sz_obj(buf) - sizeof(size_t);
 	return (loff_t)start_pos;
 }
 
