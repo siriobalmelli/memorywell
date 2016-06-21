@@ -236,10 +236,14 @@ int test_splice_integrity()
 	int plumbing[2] = { 0, 0 };
 	Z_die_if(pipe(plumbing), "bad turd-herder");
 
-	/* cbuf 
-		RPA ... leave space for header at head of buf 
-		... leave space for header at end of buf */
-	Z_die_if(!(b = cbuf_create(i_size + sizeof(ssize_t), 1, map_dir)), "");
+	/* Make cbuf.
+	The trailing 8B of each cbuf block will be used as a 'data_len' variable.
+		hence, cbuf_create() will add 8 to requested 'obj_sz'.
+		*/
+	Z_die_if(!(
+		b = cbuf_create(i_size, 1, map_dir)
+		), "i_size=%d, map_dir='%s'",
+		i_size, map_dir);
 
 	/* set source */
 	for (i=0; i < i_size; i++)
