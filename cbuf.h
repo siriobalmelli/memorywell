@@ -362,7 +362,12 @@ Z_INL_FORCE size_t cbuf_splice_max(cbuf_t *b)
 size_t	cbuf_blk_data_len(cbuf_t *b, uint32_t pos, int i);
 int	cbuf_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t len);
 size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size);
-size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write);
+size_t	cbuf_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write, 
+				loff_t sub_offt, size_t sub_len);
+Z_INL_FORCE size_t cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
+{
+	return cbuf_splice_to_pipe_sub(b, pos, i, fd_pipe_write, 0, 0);
+}
 
 /*	cbuf_offt()
 Deliver the memory address at the beginning of the nth in a 

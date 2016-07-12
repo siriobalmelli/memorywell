@@ -146,7 +146,8 @@ returns nr. of bytes spliced, 0 on error.
 
 Note: if CBUF_MMAP, vmsplice() is used.
 	*/
-size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
+size_t	cbuf_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write, 
+				loff_t sub_offt, size_t sub_len)
 {
 	int fd;
 	size_t *data_len;
@@ -166,13 +167,24 @@ size_t	cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 		fd = b->mmap_fd; /* fd is cbuf itself */
 	}
 
-	/* no data, no copy */
+	/* sanity */
 	if (*data_len == 0)
 		return 0;
 	if (*data_len > cbuf_splice_max(b)) {
 		Z_err("corrupt splice size of %ld, max is %ld", 
 			*data_len, cbuf_splice_max(b));
 		return 0;
+	}
+
+	/* sub-block? */
+	if (sub_len) {
+		if (sub_len > (int64_t)*data_len - sub_offt) {
+			Z_err("bad sub-block request: len %ld @offt %ld > *data_len %ld",
+				sub_len, sub_offt, *data_len);
+			return 0;
+		}
+		data_len = &sub_len;
+		temp_offset += sub_offt;
 	}
 
 	/* Pull chunk from buffer.
