@@ -14,21 +14,22 @@
 #include <sys/types.h>
 /* unlink */
 #include <unistd.h>
-#include <stdlib.h>
 
 #include "cbuf.h"
 #include "mtsig.h"
 #include "zed_dbg.h"
 
-int test_splice_integrity();
-/* 'p' == backing store */
-int test_p();
-/* 's' == splice test */
+/* threads executing splice ops */
 void *splice_tx(void *args);
 void *splice_rx(void *args);
-int test_splice();
-/* test splice() call */
+/* run splice test */
+void run_splice_test();
+
+/* non-cbuf uses of splice(), for testing & illustration */
 int straight_splice();
+int test_splice_integrity();
+
+char *map_dir = NULL;
 
 #define BLK_CNT	1024
 #define BLK_SZ 8192
@@ -38,74 +39,6 @@ int src_fd = 0, dst_fd = 0;
 void *src_buf = NULL, *dst_buf = NULL;
 size_t sz_src = 0, sz_sent = 0;
 cbuf_t *b = NULL;
-
-/*	test_p()
-Tests a cbuf_p (aka: cbuf with backing store).
-	*/
-int test_p()
-{
-	int err_cnt = 0;
-	int plumbing[2] = { 0, 0 };
-	Z_die_if(pipe(plumbing), "bad turd-herder");
-
-	/* make cbufp large enough for entire file */
-	uint32_t cnt = sz_src / BLK_SZ + 1;
-	size_t pkt_sz = BLK_SZ;
-	b = cbuf_create_p(BLK_SZ, cnt, "./temp.bin");
-	Z_die_if(!b, "");
-
-	uint32_t pos = cbuf_snd_res_m(b, cnt);
-	Z_die_if(pos == -1, "can't reserve %d blocks snd", cnt);
-	size_t i, temp;
-	for (i=0; i < cnt; i++) {
-		/* last packet is smaller is smaller than the stock packet size */
-		if (i == cnt-1)
-			pkt_sz = sz_src - (pkt_sz * (cnt-1));
-
-		/* splice into pipe (increments seek position @ source */
-		temp = splice(src_fd, NULL, plumbing[1], NULL, pkt_sz, 0);
-		Z_die_if(temp != pkt_sz, 
-			"file -> plumbing: temp %ld != pkt_sz %ld @i=%ld",
-			temp, pkt_sz, i);
-
-		/* splice into 'cbuf' (actually, backing store) */
-		temp = cbuf_splice_from_pipe(plumbing[0], b, pos, i, pkt_sz);
-		Z_die_if(temp != pkt_sz, 
-			"plumbing -> cbufp: temp %ld != pkt_sz %ld @i=%ld",
-			temp, pkt_sz, i);
-	}
-	cbuf_snd_rls_m(b, cnt);
-	
-	pos = cbuf_rcv_res_m(b, cnt);
-	pkt_sz = BLK_SZ;
-	Z_die_if(pos == -1, "can't reserve %d blocks rcv", cnt);
-	for (i=0; i < cnt; i++) {
-		/* last packet is smaller is smaller than the stock packet size */
-		if (i == cnt-1)
-			pkt_sz = sz_src - (pkt_sz * (cnt-1));
-
-		/* splice into plumbing */
-		temp = cbuf_splice_to_pipe(b, pos, i, plumbing[1]);
-		Z_die_if(temp != pkt_sz, 
-			"cbuf -> plumbing: temp %ld != pkt_sz %ld @i=%ld", 
-			temp, pkt_sz, i);
-
-		/* splice into destination file.
-		Increments sz_sent as it writes.
-			*/
-		temp = splice(plumbing[0], NULL, dst_fd, (loff_t *)&sz_sent, pkt_sz, 0);
-		Z_die_if(temp != pkt_sz, 
-			"plumbing -> file: temp %ld != pkt_sz %ld @i=%ld", 
-			temp, pkt_sz, i);
-	}
-
-out:
-	if (plumbing[0])
-		close(plumbing[0]);
-	if (plumbing[1])
-		close(plumbing[1]);
-	return err_cnt;
-}
 
 void *splice_tx(void *args)
 {
@@ -124,7 +57,6 @@ void *splice_tx(void *args)
 	size_t step_sz = 0;
 	int i;
 
-	size_t cbuf_payload = b->overflow_ +1 - sizeof(ssize_t);
 	size_t sz_outstanding = 0;
 	size_t temp;
 
@@ -134,14 +66,14 @@ void *splice_tx(void *args)
 		if (sz_outstanding == -1)
 			break;
 		while (sz_outstanding) {
-			step_sz = (sz_outstanding >> b->sz_bitshift_) +1;
+			step_sz = sz_outstanding / cbuf_splice_max(b) + 1;
 			pos = cbuf_snd_res_m_cap(b, &step_sz);
 			if (pos == -1) {
 				pthread_yield();
 				continue;
 			}
 			for (i = 0; i < step_sz; i++) {
-				temp = cbuf_splice_from_pipe(fittings[0], b, pos, i, cbuf_payload);
+				temp = cbuf_splice_from_pipe(fittings[0], b, pos, i, sz_outstanding);
 				sz_outstanding -= temp;
 				sz_pushed += temp;
 			}
@@ -181,7 +113,7 @@ void *splice_rx(void *args)
 
 	while (sz_sent < sz_src && !kill_flag) {
 		/* get buffer chunks, dump them all into local pipe */
-		step_sz = ((sz_src - sz_sent) >>b->sz_bitshift_) + 1;
+		step_sz = (sz_src - sz_sent) / cbuf_splice_max(b) + 1;
 		pos = cbuf_rcv_res_m_cap(b, &step_sz);
 		if (pos == -1) {
 			pthread_yield();
@@ -201,8 +133,9 @@ void *splice_rx(void *args)
 	}
 
 out:
-	/* don't set kill_flag - 
-	   rely on sender to checkpoint when the buffer is cleaned up */
+	/* Don't set kill_flag unless there was an error.
+	TX will checkpoint() to make sure we have consumed everything.
+		*/
 	kill_flag += err_cnt;
 	if (fittings[0])
 		close(fittings[0]);
@@ -215,26 +148,13 @@ out:
 /*	test_splice()
 src_file ->[tx_thread]-> cbuf ->[rx_thread]-> dst_file
 */
-int test_splice()
+void run_splice_test()
 {
-	int err_cnt = 0;
-
-	/* make cbuf */
-	b = cbuf_create(BLK_SZ, BLK_CNT);
-	Z_die_if(!b, "");
-
 	pthread_t tx_thr = mts_launch(splice_tx, NULL, NULL, NULL);
 	pthread_t rx_thr = mts_launch(splice_rx, NULL, NULL, NULL);
 
-	/*
-	while (!kill_flag)
-		sleep(1);
-		*/
-
 	pthread_join(tx_thr, NULL);
 	pthread_join(rx_thr, NULL);
-out:
-	return err_cnt;
 }
 
 /*	straight_splice()
@@ -315,9 +235,14 @@ int test_splice_integrity()
 	int plumbing[2] = { 0, 0 };
 	Z_die_if(pipe(plumbing), "bad turd-herder");
 
-	/* cbuf 
-		... leave space for header at head of buf */
-	Z_die_if(!(b = cbuf_create(i_size + sizeof(ssize_t), 1)), "");
+	/* Make cbuf.
+	The trailing 8B of each cbuf block will be used as a 'data_len' variable.
+		hence, cbuf_create() will add 8 to requested 'obj_sz'.
+		*/
+	Z_die_if(!(
+		b = cbuf_create1(i_size, 1, map_dir)
+		), "i_size=%d, map_dir='%s'",
+		i_size, map_dir);
 
 	/* set source */
 	for (i=0; i < i_size; i++)
@@ -339,8 +264,8 @@ int test_splice_integrity()
 	check = cbuf_splice_to_pipe(b, pos, 0, plumbing[1]);
 	Z_die_if(check != i_size, "splice: cbuf -> pipe");
 	/* get a handle on cbuf memory so we can check it's contents directly */
-	size_t *head;
-	uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &head);
+	size_t *data_len;
+	uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &data_len);
 	cbuf_rcv_rls(b); /* don't HAVE to release, we won't use cbuf again */
 
 	/* write to destination file, verify data is clean */
@@ -421,29 +346,55 @@ out:
 
 int main(int argc, char **argv)
 {
+	/* sanity */
 	int err_cnt = 0;
-	Z_die_if(argc < 2 || argc > 4, 
-		"usage: %s [r|s|p|i] SOURCE_FILE OUTPUT_FILE", argv[0])
-
 	mtsig_util_sigsetup(mtsig_util_handler);
 
+	/* arguments */
+	Z_die_if(argc < 2 || argc > 5, 
+		"usage: %s [r|s|m|p|i] SOURCE_FILE OUTPUT_FILE [MAP_DIR]", argv[0])
+	/* NOTE: it's not illegal to have 'map_dir' NULL:
+		cbuf library will use it's internal default of "/tmp".
+		*/
+	if (argc == 5)
+		map_dir = argv[4];
+
+	// TODO: change over to libc "standard" getopt() handling
 	switch (argv[1][0]) {
 	case 'r':
 		/* 'regular' mode: just do a splice file -> file 
-		   as a proof of splice() usage and general comparison. 
+			as a proof of splice() usage and general comparison.
 			*/
 		Z_die_if(setup_files(argc, argv), "");
 		err_cnt += straight_splice();
 		break;
 	case 's':
-		/* 'splice' mode: splice file -> tx_pipe -> cbuf -> rx_pipe -> file */
 		Z_die_if(setup_files(argc, argv), "");
-		err_cnt += test_splice();
+		/* 'splice' mode: splice file -> tx_pipe -> cbuf -> rx_pipe -> file */
+		Z_die_if(!(
+			b = cbuf_create1(BLK_SZ, BLK_CNT, map_dir)
+			), "BLK_SZ=%d, BLK_CNT=%d, map_dir='%s'",
+			BLK_SZ, BLK_CNT, map_dir);
+		run_splice_test();
+		break;
+	case 'm':
+		Z_die_if(setup_files(argc, argv), "");
+		/* 'splice' mode: splice file -> tx_pipe -> cbuf(malloc) -> rx_pipe -> file */
+		Z_die_if(!(
+			b = cbuf_create_malloc(BLK_SZ, BLK_CNT)
+			), "BLK_SZ=%d, BLK_CNT=%d, map_dir='%s'",
+			BLK_SZ, BLK_CNT, map_dir);
+		run_splice_test();
 		break;
 	case 'p':
 		/* test backing store */
 		Z_die_if(setup_files(argc, argv), "");
-		err_cnt += test_p();
+		/* 'splice' mode: splice file -> tx_pipe -> cbuf(backing store) -> rx_pipe -> file */
+		Z_die_if(!(
+			b = cbuf_create_p1(BLK_SZ, BLK_CNT, map_dir)
+			), "BLK_SZ=%d, BLK_CNT=%d, map_dir='%s'",
+			BLK_SZ, BLK_CNT, map_dir);
+		run_splice_test();
 		break;
 	case 'i':
 		err_cnt += test_splice_integrity();

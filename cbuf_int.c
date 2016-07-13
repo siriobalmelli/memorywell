@@ -58,7 +58,8 @@ uint32_t next_multiple(uint32_t x, uint32_t mult)
 
 cbuf_t *cbuf_create_(uint32_t obj_sz, 
 			uint32_t obj_cnt, 
-			uint8_t flags) 
+			uint8_t flags, 
+			char *map_dir) 
 {
 	cbuf_t *b = NULL;
 	Z_die_if(!obj_sz, "expecting object size");
@@ -67,41 +68,59 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 	memset(b, 0x0, sizeof(cbuf_t));
 	b->cbuf_flags = flags;
 
-	/* alignment:
-		obj_sz must be a power of 2
-		buf_sz must be a multiple of obj_sz AND a power of 2
+	uint32_t sz_aligned;
+	/* alignment: obj_sz must be able to accomodate an 8B 'data_len' (add that in),
+		and must then be a power of 2.
 		*/
-	obj_sz = next_pow2(obj_sz);
-	uint32_t buf_sz = obj_sz * obj_cnt;
-	buf_sz = next_pow2(next_multiple(buf_sz, obj_sz));
-	Z_err_if(buf_sz == -1, "buffer or object size too big");
-	b->overflow_ = buf_sz - 1; /* used as a bitmask later */
-	b->sz_unused = buf_sz;
-
+	sz_aligned = next_pow2(obj_sz + sizeof(size_t));
+	Z_bail_if(sz_aligned < obj_sz,
+		"aligned obj_sz overflow: obj_sz=%d > sz_aligned=%d",
+		obj_sz, sz_aligned);
+	obj_sz = sz_aligned;
 	/* calc shift value necessary to turn `buf_sz / obj_sz` 
-		into a bitwise op */
-	uint32_t temp = obj_sz;
-	while (temp > 1) {
-		temp >>= 1;
+		into a bitwise op.
+	Use sz_aligned just as a temp variable.
+		*/
+	while (sz_aligned > 1) {
+		sz_aligned >>= 1;
 		b->sz_bitshift_++;
 	}
 
-	/* MMAP */
-	// TODO Robert: implement malloc case
-	char tfile[] = "/tmp/cbufXXXXXX";
-	b->mmap_fd = mkostemp(tfile, O_NOATIME);
-	Z_die_if(b->mmap_fd < 1, "mmap '%s'", tfile);
-	/* make space, map */
-	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
-	Z_die_if(ftruncate(b->mmap_fd, len), "");
-	/* MUST be MAP_SHARED. If not, cbuf -> file splices WILL NOT WRITE to disk. */
-	b->buf = mmap(NULL, len, (PROT_READ | PROT_WRITE), 
-		(MAP_SHARED | MAP_LOCKED | MAP_NORESERVE), b->mmap_fd, 0);
-	Z_die_if(b->buf == MAP_FAILED, "sz:%ld", len);
-	Z_die_if(unlink(tfile), "");
+	/* 'buf_sz' must be a multiple of obj_sz AND a power of 2 */
+	uint32_t buf_sz = obj_sz * obj_cnt;
+	sz_aligned = next_pow2(next_multiple(buf_sz, obj_sz));
+	Z_bail_if(sz_aligned < buf_sz,
+		"aligned buf_sz overflow: buf_sz=%d > sz_aligned=%d",
+		buf_sz, sz_aligned);
+	buf_sz = sz_aligned;
+	/* assign relevant cbuf_t values derived from 'buf_sz' */
+	b->overflow_ = buf_sz - 1; // used as a bitmask later 
+	b->sz_unused = buf_sz;
+	
 
-	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d", 
-	     (uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), b->overflow_, b->sz_bitshift_);
+	/* Size assumptions MUST hold true regardless of 
+		whether 'buf' is malloc() || mmap() 
+		*/
+	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
+
+	/* MALLOC */
+	if (b->cbuf_flags & CBUF_MALLOC) {
+		Z_die_if(!(
+			b->buf = malloc(len)
+			), "len = %ld", len);
+	/* MMAP */
+	} else {		
+		struct iovec temp = { NULL, len };
+		Z_die_if((
+			b->mmap_fd = sbfu_tmp_map(&temp, map_dir)
+			) < 1, "mmap into dir '%s;", map_dir);
+		b->buf = temp.iov_base;
+ 	}
+
+	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d flags='%s'", 
+		(uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), 
+		b->overflow_, b->sz_bitshift_,
+		cbuf_flags_prn_(b->cbuf_flags));
 	return b;
 out:
 	cbuf_free_(b);
@@ -125,27 +144,33 @@ void cbuf_free_(cbuf_t *buf)
 		cnt = __atomic_load_n(&buf->chk_cnt, __ATOMIC_SEQ_CST);
 	}
 
-	/* free memory */
-	// TODO Robert: handle mmap case
+	/* if allocated, free buffer */
+	/* sanity */
 	if (buf->buf) {
-
-		/* handle backing store (cbufp_) ? */
-		if (buf->cbuf_flags & CBUF_P) {
-			cbufp_t *f = buf->buf;
-			sbfu_unmap(f->fd, &f->iov);
-			unlink(f->file_path); 
-			free(f->file_path);
-			errno = 0;
+		/* malloc() is straightforward */
+		if (buf->cbuf_flags & CBUF_MALLOC) {
+			free(buf->buf);
+		/* It must be mmap()'ed.
+		Avoid trying to free a '-1' (aka: MAP_FAILED).
+			*/
+		} else if (buf->buf != MAP_FAILED ) {
+			/* handle backing store (cbufp_) */
+			if (buf->cbuf_flags & CBUF_P) {
+				cbufp_t *f = buf->buf;
+				sbfu_unmap(f->fd, &f->iov);
+				errno = 0;
+			}
+			//munmap(buf->buf, next_multiple(cbuf_sz_buf(buf), cbuf_hugepage_sz));
+			struct iovec temp = { 
+				buf->buf, 
+				next_multiple(buf->overflow_ + 1, cbuf_hugepage_sz)
+			};
+			buf->mmap_fd = sbfu_unmap(buf->mmap_fd, &temp);
 		}
-
-		/* avoid trying to free a '-1' (aka: MAP_FAILED) */
-		if (buf->buf != MAP_FAILED)
-			munmap(buf->buf, next_multiple(cbuf_sz_buf(buf), cbuf_hugepage_sz));
+		/* in all cases, set 'buf' NULL */
+		buf->buf = NULL;
 	}
-
-	/* open file descriptors */
-	if (buf->mmap_fd)
-		close(buf->mmap_fd);
+	
 	Z_inf(3, "cbuf @0x%lx", (uint64_t)buf);
 	free(buf);
 }
@@ -201,10 +226,20 @@ void cbuf_release__(cbuf_t		*buf,
 	}
 }
 
-/* utterly ignore committed bytes - Shia: JUST DOOOOIIIIT 
-	... returns number of bytes released.
+/*	cbuf_release_scary__()
+Utterly ignore committed bytes - Shia: JUST DOOOOIIIIT.
+
+"scary" is usually safe in a single-threaded scenario (i.e.: caller knows 
+	it is the ONLY thread working with that side of the buffer).
+In a multi-threaded setting, "scary" is PROBABLY safe if caller knows
+	it holds the EARLIEST reservation, and only releases
+	the precise quantity that was reserved THAT time (i.e.: caller is tracking 
+	'pos' and 'res_cnt' of EACH of ITS OWN reservations, and only releasing
+	one reservation at a time).
+
+Returns number of bytes released.
 	*/
-void cbuf_release_scary__(cbuf_t		*buf,
+void cbuf_release_scary__(cbuf_t	*buf,
 			size_t		blk_sz,
 			uint32_t	*reserved,
 			uint32_t	*uncommit,
@@ -254,21 +289,41 @@ Both values are masked so as to give actual position values.
 	*/
 void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv)
 {
+	/*  Use register as a gimmick to FORCE the order
+		in which variables are loaded.
+		*/
+	register uint32_t reg;
+
 	if (act_snd) {
+		reg = __atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST);
 		__atomic_store_n(act_snd, 
-				(__atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST)
-					+ __atomic_load_n(&buf->sz_ready, __ATOMIC_SEQ_CST) 
-				) & buf->overflow_,
+			(reg + __atomic_load_n(&buf->sz_ready, __ATOMIC_SEQ_CST)) & buf->overflow_,
 			__ATOMIC_SEQ_CST);
 	}
 
 	if (act_rcv) {
+		reg = __atomic_load_n(&buf->sz_unused, __ATOMIC_SEQ_CST);
 		__atomic_store_n(act_rcv, 
-				(__atomic_load_n(&buf->sz_unused, __ATOMIC_SEQ_CST) 
-					+ __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)
-				) & buf->overflow_,
+			(reg + __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)) & buf->overflow_,
 			__ATOMIC_SEQ_CST);
 	}
+}
+
+/*	cbuf_flags_prn_()
+Useful utility for showing flag contents in print statements.
+	*/
+const char *cbuf_flags_prn_(uint8_t cbuf_flags)
+{
+	Z_die_if(cbuf_flags > 3, "%d out of range", cbuf_flags);
+	const char *flags[] = {
+		"NONE",
+		"CBUF_P",
+		"CBUF_MALLOC",
+		"CBUF_P | CBUF_MALLOC"
+	};
+	return flags[cbuf_flags];
+out:
+	return NULL;
 }
 
 #undef Z_BLK_LVL

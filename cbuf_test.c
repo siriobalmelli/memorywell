@@ -18,14 +18,22 @@ struct sequence {
 	char		padding[48];
 };
 
-int test_cbuf_single();
-int test_cbuf_steps();
-int test_cbuf_threaded();
+int test_cbuf_single(int use_malloc);
+int test_cbuf_steps(int use_malloc);
+int test_cbuf_threaded(int use_malloc);
 void *snd_thread(void *args);
 void *rcv_thread(void *args);
 
+// RPA added for testing only so all the function signatures matched.
+char *map_dir = "/tmp";
+
 uint64_t global_sum = 0;
 uint64_t expected_sum = 0;
+
+#ifdef Z_BLK_LVL
+#undef Z_BLK_LVL
+#endif
+#define Z_BLK_LVL 1
 
 int main()
 {
@@ -34,29 +42,50 @@ int main()
 	Z_inf(0, "obj_sz >= %lu, obj_cnt = %lu, %ld iter", 
 		OBJ_SZ, OBJ_CNT, (long)NUMITER * THREAD_CNT);
        
-	/* test that a cbuf does in fact go all the way to UINT32_MAX size */
-	uint32_t req_sz = (1 <<31) -1; /* Sirio is resigned that this will always give a compile warning */
-	cbuf_t *random = cbuf_create(req_sz, 1);
-	Z_die_if(!random, "buf failed to create");
-	Z_die_if(cbuf_sz_buf(random) != req_sz+1, "buf_sz %u != req_sz %u",
-		cbuf_sz_buf(random), req_sz+1);
+	/* Test that a cbuf does in fact go all the way to UINT32_MAX size.
+		Manually adjust for the 8B added by cbuf_create().
+		*/
+	uint32_t req_sz = (1UL << 31) - sizeof(size_t) -1;
+	cbuf_t *random = cbuf_create1(req_sz, 1, map_dir);
+	Z_die_if(!random, "buf failed to create req_sz=%u", req_sz);
+	Z_die_if(cbuf_sz_buf(random) != req_sz+1+sizeof(size_t),
+		"buf_sz %u != req_sz %lu",
+		cbuf_sz_buf(random), req_sz+1+sizeof(size_t));
 	cbuf_free(random);
 
 	start = clock();
 	Z_inf(0, "single thread, single step");
-	err_cnt += test_cbuf_single();
+	err_cnt += test_cbuf_single(0);
 	start = clock() - start;
 	Z_inf(0, "ELAPSED: %ld", start);
        
-	start = clock();
-	Z_inf(0, "single thread, stepped: %d", STEP_SIZE);
-	err_cnt += test_cbuf_steps();
+  	start = clock();
+	Z_inf(0, "single thread, single step (malloc'ed)");
+	err_cnt += test_cbuf_single(1);
 	start = clock() - start;
 	Z_inf(0, "ELAPSED: %ld", start);
 
 	start = clock();
+	Z_inf(0, "single thread, stepped: %d", STEP_SIZE);
+	err_cnt += test_cbuf_steps(0);
+	start = clock() - start;
+	Z_inf(0, "ELAPSED: %ld", start);
+
+    	start = clock();
+	Z_inf(0, "single thread, stepped (malloc'ed): %d", STEP_SIZE);
+	err_cnt += test_cbuf_steps(1);
+	start = clock() - start;
+	Z_inf(0, "ELAPSED: %ld", start);
+
+  	start = clock();
 	Z_inf(0, "%d threads, stepped: %d", THREAD_CNT, STEP_SIZE);
-	err_cnt += test_cbuf_threaded();
+	err_cnt += test_cbuf_threaded(0);
+	start = clock() - start;
+	Z_inf(0, "ELAPSED: %ld", start);
+
+  	start = clock();
+	Z_inf(0, "%d threads, stepped (malloc'ed): %d", THREAD_CNT, STEP_SIZE);
+	err_cnt += test_cbuf_threaded(1);
 	start = clock() - start;
 	Z_inf(0, "ELAPSED: %ld", start);
 
@@ -67,12 +96,16 @@ out:
 /*	test_cbuf_single()
 Tests a single-sender -> single-receiver configuration.
 
-Returns 0 on success.
+Re: turns 0 on success.
 	*/
-int test_cbuf_single()
+int test_cbuf_single(int use_malloc)
 {
 	int err_cnt = 0;
-	cbuf_t *c = cbuf_create(OBJ_SZ, OBJ_CNT);
+	cbuf_t *c = NULL;
+	if (use_malloc)
+		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
+	else
+		c = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
 	int i;
@@ -99,10 +132,14 @@ out:
 	return err_cnt;
 }
 
-int test_cbuf_steps()
+int test_cbuf_steps(int use_malloc)
 {
 	int err_cnt = 0;
-	cbuf_t *c = cbuf_create(OBJ_SZ, OBJ_CNT);
+	cbuf_t *c = NULL;
+	if (use_malloc)
+		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
+	else
+		c = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
 	int i, j;
@@ -137,7 +174,13 @@ out:
 	return err_cnt;
 }
 
-int test_cbuf_threaded()
+/*	test_cbuf_threaded()
+Creates a cbuf, then runs a multithreaded IO test on it.
+If 'use_malloc' is set, uses a cbuf_malloc().
+
+returns 0 on success.
+	*/
+int test_cbuf_threaded(int use_malloc)
 {
 	int err_cnt = 0;
 	
@@ -154,9 +197,18 @@ int test_cbuf_threaded()
 			@8 : 0+1+2+3+4+5+6+7 = (8-1)*0.5*8 = 28
 	*/
 	uint64_t final_verif = (NUMITER -1) * 0.5 * NUMITER * THREAD_CNT;
+	/* reset global sums
+	(otherwise test will fail when run more than once)
+		*/
+	global_sum = expected_sum = 0;
 
 	/* circ buf */
-	cbuf_t *buf = cbuf_create(OBJ_SZ, OBJ_CNT);
+	cbuf_t *buf = NULL;
+	if (use_malloc)
+		buf = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
+	else 
+		buf = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
+
 	Z_die_if(!buf, "fail to alloc");
 
 	/* launch senders & receivers */
@@ -298,3 +350,6 @@ retry:
 	/* return number of busy-waits we had to go through */
 	pthread_exit((void*)busy_waits);
 }
+
+#undef Z_BLK_LVL
+#define Z_BLK_LVL 0
