@@ -15,8 +15,6 @@
 /* unlink */
 #include <unistd.h>
 
-#include <assert.h>
-
 #include "cbuf.h"
 #include "mtsig.h"
 #include "zed_dbg.h"

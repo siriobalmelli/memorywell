@@ -1,7 +1,6 @@
 #include "cbuf.h"
 #include "mtsig.h"
 #include <time.h>
-#include <assert.h>
 
 #define STEP_SIZE 32	/* How many blocks should we try to reserve at one time */
 //#define NUMITER 4800000	
