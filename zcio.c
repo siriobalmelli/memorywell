@@ -1,4 +1,4 @@
-#include "cbuf_int.h"
+#include "zcio.h"
 
 /*
 	Functions for splicing memory in and out of cbuf blocks.
@@ -15,7 +15,7 @@ Typically, this is set when splice()ing data into the block,
 	or by calling _set_data_len() directly.
 returns data_len or -1 on error;
 	*/
-size_t	zcio_blk_data_len(zcio_t *b, uint32_t pos, int i)
+size_t zcio_blk_data_len(cbuf_t *b, uint32_t pos, int i)
 {
 	size_t ret;
 
@@ -48,12 +48,12 @@ Using this function, caller can directly control
 
 returns 0 on success.
 	*/
-int	cbuf_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
+int	zcio_blk_set_data_len(struct zcio *b, uint32_t pos, int i, size_t data_len)
 {
 	int err_cnt = 0;
 	Z_die_if(!b, "args");
-	if (b->cbuf_flags & CBUF_P) {
-		cbufp_t *f = cbuf_offt(b, pos, i);
+	if (b->cbuf_flagsP) {
+		zcio *f = cbuf_offt(b, pos, i);
 		f->data_len = data_len;
 	} else {
 		size_t *data_len_buf = NULL;
@@ -77,7 +77,7 @@ returns 'data_len' == nr. of bytes moved.
 NOTE that if 'buf' is CBUF_MALLOC, the mechanics are identical save that 
 	the data is read() instead of splice()ed.
 	*/
-size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size)
+size_t	zcio_splice_from_pipe(int fd_pipe_read, struct zcio *b, uint32_t pos, int i, size_t size)
 {
 	size_t *data_len = NULL;
 	loff_t temp_offset = 0;
@@ -146,7 +146,7 @@ returns nr. of bytes spliced, 0 on error.
 
 Note: if CBUF_MMAP, vmsplice() is used.
 	*/
-size_t	cbuf_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write, 
+size_t	zcio_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write, 
 				loff_t sub_offt, size_t sub_len)
 {
 	int fd;
@@ -155,7 +155,7 @@ size_t	cbuf_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write
 	struct iovec iov;
 
 	/* params: backing store */
-	if (b->cbuf_flags & CBUF_P) {
+	if (b->cbuf_flags) {
 		cbufp_t *f = cbuf_offt(b, pos, i);
 		data_len = &f->data_len;
 		temp_offset = f->blk_offset;
@@ -223,7 +223,6 @@ size_t	cbuf_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write
 
 
 /////// BELOW NEEDS TO GO INTO ZCIO/////////////////////////////////
-////////FIX THE BITS YOU CHANGED////////////////////
 /*	cbuf_create_p1()
 Creates a temporary "backing store" mmap()ed to the file path
 	requested by 'backing_store'.

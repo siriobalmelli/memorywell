@@ -196,6 +196,7 @@ pos & sz_overflow_
 #include <unistd.h>
 
 #include "zed_dbg.h"
+#include "zcio.h"
 
 /*	TODO: changes to naming to implement:
 
@@ -331,7 +332,6 @@ Z_INL_FORCE cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
 
-cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
 Z_INL_FORCE cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt)
 	{ return cbuf_create_p1(obj_sz, obj_cnt, NULL); }
 
