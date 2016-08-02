@@ -1,7 +1,12 @@
-#include "zcio.h"
+#include "cbuf_int.h"
 
-#include "zed_dbg.h"
-#include 
+/*
+	Functions for splicing memory in and out of cbuf blocks.
+
+	For background and Linus' approach re: splice() and vmsplice(), please see
+	thread @ http://yarchive.net/comp/linux/splice.html
+*/
+
 
 /*	cbuf_blk_data_len()
 
@@ -10,20 +15,13 @@ Typically, this is set when splice()ing data into the block,
 	or by calling _set_data_len() directly.
 returns data_len or -1 on error;
 	*/
-/*	cbuf_blk_data_len()
-
-Returns the SIZE OF USABLE DATA in a cbuf block.
-Typically, this is set when splice()ing data into the block,
-	or by calling _set_data_len() directly.
-returns data_len or -1 on error;
-	*/
-size_t	cbuf_blk_data_len(cbuf_t *b, uint32_t pos, int i)
+size_t	zcio_blk_data_len(zcio_t *b, uint32_t pos, int i)
 {
 	size_t ret;
 
 	/* If this cbuf has a backing store, block is a tracking stuct. */
-	if (b->cbuf_flags & CBUF_P) {
-		cbufp_t *f = cbuf_offt(b, pos, i);
+	if (b->zcio_flags & CBUF_P) {
+		cbufp_t *f = zcio_offt(b, pos, i);
 		ret = f->data_len;
 
 	/* Otherwise, data length is in the first 8B of the block itself.
@@ -31,18 +29,17 @@ size_t	cbuf_blk_data_len(cbuf_t *b, uint32_t pos, int i)
 		*/
 	} else {
 		size_t *data_len = NULL;
-		cbuf_lofft(b, pos, i, &data_len);
+		zcio_lofft(b, pos, i, &data_len);
 		ret = *data_len;
 	}
 
-	if (ret > cbuf_splice_max(b)) {
+	if (ret > zcio_splice_max(b)) {
 		Z_err("cbuf 0x%lx pos %d i %d thinks it's size is %ld. likely corrupt.", 
 			(uint64_t)b, pos, i, ret);
 		ret=0;
 	}
 	return ret;
 }
-
 
 /*	cbuf_blk_set_data_len()
 Explicitly set the size of "usable" data in a cbuf.
@@ -67,7 +64,6 @@ int	cbuf_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
 out:
 	return err_cnt;
 }
-
 
 /*	cbuf_splice_from_pipe()
 Splice()s at most 'size' bytes from 'a_pipe[0]' into the cbuf block at 'pos', offset 'i'.
@@ -138,7 +134,6 @@ size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 	/* done */
 	return *data_len;
 }
-
 
 /*	cbuf_splice_to_pipe()
 Reads 'data_len' from the block described by 'pos' and 'i'.

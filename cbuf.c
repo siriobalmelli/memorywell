@@ -123,7 +123,7 @@ This reduces the cost of splice() operation between the backing store
 	and a destination file on that same file system (essentially,
 	only some filesystem accounting needs to be done).
 
-TODO: Robert, the current 'backing_store' logic is probably wrong:
+ ODO: Robert, the current 'backing_store' logic is probably wrong:
 	we want to allow the user to specify which DIRECTORY PATH
 	the backing store should be created in, not necessarily what
 	its precise filename should be (I can't think of a case, can you?).
@@ -212,23 +212,6 @@ void cbuf_free(cbuf_t *buf)
 	cbuf_free_(buf);
 }
 
-/*	cbuf_(snd|rcv)_reserve()
-Obtain exclusive title to an obj_sz chunk of memory in the circular buffer.
-This memory is no longer available for either sending or receiving
-	... until the corresponsing "release" is called.
-*/
-void *cbuf_snd_res(cbuf_t *buf)
-{
-	/* pos is already masked to cycle back to 0 */
-	uint32_t pos = cbuf_reserve__(buf, 1 << buf->sz_bitshift_, 
-					&buf->sz_unused, 
-					&buf->snd_reserved, 
-					&buf->snd_pos);
-	if (pos == -1)
-		return NULL;
-	else
-		return buf->buf + pos; /* does masking */
-}
 
 /*	cbuf_(snd|srv)_serve_multi()
 Obtain multiple contiguous (obj_sz * cnt) chunks of memory.
@@ -239,7 +222,7 @@ Returns the POSITION of the reservation, not a memory address.
 	to cbuf_offt().
 Returns -1 on fail.
 	*/
-uint32_t cbuf_snd_res_m(cbuf_t *buf, size_t cnt)
+uint32_t cbuf_snd_res(cbuf_t *buf, size_t cnt)
 {
 	/* sanity */
 	if (!cnt)
@@ -259,7 +242,7 @@ If successful, returns `pos` and *res_cnt is set to the
 May fail, which returns -1 and leaves the value of *res_cnt
 	as the reservation size attempted.
 	*/
-uint32_t cbuf_snd_res_m_cap(cbuf_t *buf, size_t *res_cnt)
+uint32_t cbuf_snd_res_cap(cbuf_t *buf, size_t *res_cnt)
 {
 	/* bitshift sz_ready so it gives an OBJECT COUNT
 		as opposed to a count of BYTES
@@ -275,21 +258,7 @@ uint32_t cbuf_snd_res_m_cap(cbuf_t *buf, size_t *res_cnt)
 /*	The _rcv_ family of functions is symmetric to the _snd_ ones
 		above. Look there for detailed comments.
 	*/
-void *cbuf_rcv_res(cbuf_t *buf)
-{
-	/* attempt a reservation, get position */
-	uint32_t pos = cbuf_reserve__(buf, 1 << buf->sz_bitshift_, 
-					&buf->sz_ready, 
-					&buf->rcv_reserved, 
-					&buf->rcv_pos);
-	/* turn pos into an address */
-	if (pos == -1)
-		return NULL;
-	else
-		return buf->buf + pos;
-}
-
-uint32_t cbuf_rcv_res_m(cbuf_t *buf, size_t cnt)
+uint32_t cbuf_rcv_res(cbuf_t *buf, size_t cnt)
 {
 	/* not asking for anything? bye. */
 	if (!cnt)
@@ -302,7 +271,7 @@ uint32_t cbuf_rcv_res_m(cbuf_t *buf, size_t cnt)
 					&buf->rcv_pos);
 }
 
-uint32_t cbuf_rcv_res_m_cap(cbuf_t *buf, size_t *res_cnt)
+uint32_t cbuf_rcv_res_cap(cbuf_t *buf, size_t *res_cnt)
 {
 	size_t possible = buf->sz_ready >> buf->sz_bitshift_;
 	if (*res_cnt > possible)
@@ -310,15 +279,8 @@ uint32_t cbuf_rcv_res_m_cap(cbuf_t *buf, size_t *res_cnt)
 	return cbuf_rcv_res_m(buf, *res_cnt);
 }
 
-void cbuf_snd_rls(cbuf_t *buf)
-{
-	cbuf_release__(buf, 1 << buf->sz_bitshift_, 
-			&buf->snd_reserved, 
-			&buf->snd_uncommit,
-			&buf->sz_ready);
-}
 
-void cbuf_snd_rls_m(cbuf_t *buf, size_t cnt)
+void cbuf_snd_rls(cbuf_t *buf, size_t cnt)
 {
 	if (!cnt)
 		return;
@@ -329,17 +291,9 @@ void cbuf_snd_rls_m(cbuf_t *buf, size_t cnt)
 			&buf->sz_ready);
 }
 
-void cbuf_rcv_rls(cbuf_t *buf)
-{
-	cbuf_release__(buf, 1 << buf->sz_bitshift_, 
-			&buf->rcv_reserved, 
-			&buf->rcv_uncommit,
-			&buf->sz_unused);
-}
 
-void cbuf_rcv_rls_m(cbuf_t *buf, size_t cnt)
-{
-	if (!cnt)
+void cbuf_rcv_rls(cbuf_t *buf, size_t cnt)
+{ if (!cnt)
 		return;
 	cbuf_release__(buf, cnt << buf->sz_bitshift_, 
 			&buf->rcv_reserved, 

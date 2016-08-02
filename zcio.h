@@ -68,17 +68,5 @@ Z_INL_FORCE void *cbuf_offt(cbuf_t *buf, uint32_t start_pos, uint32_t n)
 	return buf->buf + (start_pos & buf->overflow_);
 }
 
-/*	cbuf_lofft()
-Deliver the OFFSET between 'buf->buf' and the beginning of the nth in a
-	contiguous set of blocks which starts at 'pos'.
-
-This offset value is useful when calling splice().
-
-Also, point '*data_len' to the last 8B of the block.
-'data_len' will hold e.g.: the results of a splice() call.
-
-not sure if I was supposed to have cbuf_lofft in here or if that was
-one we I should delete... argh
-*/
 
 #endif //ZCIO_H

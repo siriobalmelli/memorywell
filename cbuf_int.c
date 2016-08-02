@@ -65,14 +65,14 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 	Z_die_if(!obj_sz, "expecting object size");
 	b = calloc(1, sizeof(cbuf_t));
 	Z_die_if(!b, "no buf stat");
-	memset(b, 0x0, sizeof(cbuf_t));
 	b->cbuf_flags = flags;
 
 	uint32_t sz_aligned;
 	/* alignment: obj_sz must be able to accomodate an 8B 'data_len' (add that in),
 		and must then be a power of 2.
+	TODO: NO! BAD! there shall be no data_len at the tail every cbuf block.
 		*/
-	sz_aligned = next_pow2(obj_sz + sizeof(size_t));
+	sz_aligned = next_pow2(obj_sz );
 	Z_bail_if(sz_aligned < obj_sz,
 		"aligned obj_sz overflow: obj_sz=%d > sz_aligned=%d",
 		obj_sz, sz_aligned);

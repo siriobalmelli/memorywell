@@ -195,8 +195,18 @@ pos & sz_overflow_
 #include <sys/types.h>
 #include <unistd.h>
  
-#include "sbfu.h" /* for backing store operations: cbufp_ only */
+#include "sbfu.h" /* For backing store operations: cbufp_ only
+			TODO: put ONLY in ZCIO.
+			*/
 #include "zed_dbg.h"
+
+
+/*	TODO: changes to naming to implement:
+
+	ZCIO: (Zero-Copy I/O library)
+		in | out
+		rsv | rls
+*/
 
 
 /*
@@ -204,18 +214,24 @@ pos & sz_overflow_
 */
 #define CBUF_YIELD() usleep(1000)	/* Effectively a pthread_yield(),
 					without including threading libraries.
-						*/
-#define CBUF_P		0x01	/* This cbuf contains pointers to the data,
+
+*/
+
+#if 0
+define CBUF_P		0x01	/* This cbuf contains pointers to the data,
 					not the data itself.
 				The data is resident in a user-specified (at create-time)
 					"backing store" file, which is mmap()ed.
 					*/
+
 #define CBUF_MALLOC	0x02	/* This buffer was allocated with malloc() rather than
 					mmap().
 				It may (likely) be on a "transparent hugepage" segment, 
 					courtesy of the kernel.
 				Hugepages are NOT supported for mmap()ed files.
 					*/
+
+#endif
 
 #define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.
 					This is the high bit in `chk_cnt` below.
@@ -260,8 +276,8 @@ typedef struct {
 	uint32_t	rcv_reserved;	/* Reserved by readers(s). */
 	uint32_t	rcv_uncommit;	/* Not committed because other readers I/P. */
 
-	int		mmap_fd;	/* FD of mmap'ed CBUF file itself */
-	uint32_t	unused;		/* pad out to 64B cache line */
+	/* TODO: this goes away, and becomes an unusd uint64_t >:) */
+	uint64_t	unused;
 }__attribute__ ((packed))	cbuf_t;
 
 
@@ -270,6 +286,7 @@ typedef struct {
 
 TODO: evaluate the idea of cbuf's ALWAYS having a backing store 
 	(whether it be malloc()ed or mmap()ed).
+	fuck it - this will be rewritten
 */
 typedef struct {
 	/* backing store variables: identical values in all blocks of a cbuf_p */
@@ -324,18 +341,15 @@ int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 
 /* reserve */
-void	*cbuf_snd_res(cbuf_t *buf);
-uint32_t cbuf_snd_res_m(cbuf_t *buf, size_t cnt);
-uint32_t cbuf_snd_res_m_cap(cbuf_t *buf, size_t *res_cnt); 
-void	*cbuf_rcv_res(cbuf_t *buf);
-uint32_t cbuf_rcv_res_m(cbuf_t *buf, size_t cnt);
-uint32_t cbuf_rcv_res_m_cap(cbuf_t *buf, size_t *res_cnt);
+/*  TODO: keep cbuf_cnd_res_m_cap() .. just call it "snd_res" */
+uint32_t cbuf_snd_res(cbuf_t *buf, size_t cnt); /* rename */
+uint32_t cbuf_snd_res_cap(cbuf_t *buf, size_t *res_cnt);  /* rename */
+uint32_t cbuf_rcv_res(cbuf_t *buf, size_t cnt); /* rename */
+uint32_t cbuf_rcv_res_cap(cbuf_t *buf, size_t *res_cnt); /* rename */
 
 /* release */
-void cbuf_snd_rls(cbuf_t *buf);
-void cbuf_snd_rls_m(cbuf_t *buf, size_t cnt);
-void cbuf_rcv_rls(cbuf_t *buf);
-void cbuf_rcv_rls_m(cbuf_t *buf, size_t cnt);
+void cbuf_snd_rls(cbuf_t *buf, size_t cnt); /* rename */
+void cbuf_rcv_rls(cbuf_t *buf, size_t cnt); /* rename */
 
 /* sophisticated buffer tricks */
 void		cbuf_snd_rls_mscary(cbuf_t *buf, size_t cnt);
@@ -349,7 +363,9 @@ cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b);
 int		cbuf_checkpoint_verif(cbuf_t *buf, cbuf_chk_t *checkpoint);
 int		cbuf_checkpoint_loop(cbuf_t *buf);
 
-/* splice */
+/* splice
+TODO: move to ZCIO
+*/
 Z_INL_FORCE size_t cbuf_splice_max(cbuf_t *b)
 {
 	/* if buffer has a backing store, get length of one of the blocks */
@@ -383,21 +399,6 @@ Z_INL_FORCE void *cbuf_offt(cbuf_t *buf, uint32_t start_pos, uint32_t n)
 	return buf->buf + (start_pos & buf->overflow_);
 }
 
-/*	cbuf_lofft()
-Deliver the OFFSET between 'buf->buf' and the beginning of the nth in a
-	contiguous set of blocks which starts at 'pos'.
-
-This offset value is useful when calling splice().
-
-Also, point '*data_len' to the last 8B of the block.
-'data_len' will hold e.g.: the results of a splice() call.
-	*/
-Z_INL_FORCE loff_t cbuf_lofft(cbuf_t *buf, uint32_t start_pos, uint32_t n, size_t **data_len)
-{
-	start_pos += n << buf->sz_bitshift_;
-	start_pos &= buf->overflow_;
-	*data_len = buf->buf + (uint64_t)start_pos + (uint64_t)cbuf_sz_obj(buf) - sizeof(size_t);
-	return (loff_t)start_pos;
-}
-
+//SIRIO: I can't remember if I was supposed to delete cbuf_lofft or if I've 
+//actually done this wrong....  
 #endif /* cbuf_h_ */
