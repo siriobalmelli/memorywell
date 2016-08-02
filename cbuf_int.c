@@ -102,20 +102,18 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 		whether 'buf' is malloc() || mmap() 
 		*/
 	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
+	/* 
+	 * remvoving the malloc - mmap choice
+	 * just leaving the malloc
+	 * need to ask what cbuf_flags actually is!!!
+	 * */
 
-	/* MALLOC */
-	if (b->cbuf_flags & CBUF_MALLOC) {
+	/* MALLOC ONLY */
+	if (b->cbuf_flags) {
 		Z_die_if(!(
 			b->buf = malloc(len)
 			), "len = %ld", len);
-	/* MMAP */
-	} else {		
-		struct iovec temp = { NULL, len };
-		Z_die_if((
-			b->mmap_fd = sbfu_tmp_map(&temp, map_dir)
-			) < 1, "mmap into dir '%s;", map_dir);
-		b->buf = temp.iov_base;
- 	}
+	}
 
 	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d flags='%s'", 
 		(uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), 
@@ -148,24 +146,12 @@ void cbuf_free_(cbuf_t *buf)
 	/* sanity */
 	if (buf->buf) {
 		/* malloc() is straightforward */
-		if (buf->cbuf_flags & CBUF_MALLOC) {
+		if (buf->cbuf_flags) {
 			free(buf->buf);
 		/* It must be mmap()'ed.
 		Avoid trying to free a '-1' (aka: MAP_FAILED).
 			*/
-		} else if (buf->buf != MAP_FAILED ) {
-			/* handle backing store (cbufp_) */
-			if (buf->cbuf_flags & CBUF_P) {
-				cbufp_t *f = buf->buf;
-				sbfu_unmap(f->fd, &f->iov);
-				errno = 0;
-			}
-			//munmap(buf->buf, next_multiple(cbuf_sz_buf(buf), cbuf_hugepage_sz));
-			struct iovec temp = { 
-				buf->buf, 
-				next_multiple(buf->overflow_ + 1, cbuf_hugepage_sz)
-			};
-			buf->mmap_fd = sbfu_unmap(buf->mmap_fd, &temp);
+		//delete this whole mmap else block.	
 		}
 		/* in all cases, set 'buf' NULL */
 		buf->buf = NULL;

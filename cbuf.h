@@ -194,12 +194,8 @@ pos & sz_overflow_
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
- 
-#include "sbfu.h" /* For backing store operations: cbufp_ only
-			TODO: put ONLY in ZCIO.
-			*/
-#include "zed_dbg.h"
 
+#include "zed_dbg.h"
 
 /*	TODO: changes to naming to implement:
 
@@ -217,7 +213,9 @@ pos & sz_overflow_
 
 */
 
-#if 0
+#if 0 //we want to remove these macros as cbuf will no longer or
+//have an option to do malloc or splice
+
 define CBUF_P		0x01	/* This cbuf contains pointers to the data,
 					not the data itself.
 				The data is resident in a user-specified (at create-time)
@@ -369,7 +367,7 @@ TODO: move to ZCIO
 Z_INL_FORCE size_t cbuf_splice_max(cbuf_t *b)
 {
 	/* if buffer has a backing store, get length of one of the blocks */
-	if (b->cbuf_flags & CBUF_P)
+	if (b->cbuf_flags)
 		return ((cbufp_t *)b->buf)->blk_iov.iov_len;
 
 	/* if not, subtract the size of a header from `sz_obz` and return this */

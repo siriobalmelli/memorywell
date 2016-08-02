@@ -95,97 +95,18 @@ Here, there is NO zero-copy I/O being done, and so the overhead of the O/S
 	synchronizing data to a mmap()ed file in the background 
 	can be avoided entirely by malloc()ing 'buf'.
 */
-
+//this has to go, because we only want the malloc here
+/* 
 cbuf_t *cbuf_create1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
 	return cbuf_create_(obj_sz, obj_cnt, 0x0, map_dir);
 }
+*/
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt)
 {
-	return cbuf_create_(obj_sz, obj_cnt, CBUF_MALLOC, NULL);
+	//implicitly malloc only, no MALLOC flag
+	return cbuf_create_(obj_sz, obj_cnt, 0x0, NULL);
 }
-
-/*	cbuf_create_p1()
-Creates a temporary "backing store" mmap()ed to the file path
-	requested by 'backing_store'.
-Any existing file at that path will be overwritten.
-
-Then creates a cbuf which blocks are 'sizeof(cbufp_t)' large,
-	each 'cbuf_t' describes a 'block' of memory mapped IN THE BACKING STORE.
-
-Essentially, each cbuf block is only used as a tracking structure describing 
-	a block in the backing store.
-See description of 'cbufp' in "cbuf.h".
-
-Note that the reason 'backing_store' is user-provided is to allow the user to
-	force backing store creation on a disk of their own choosing.
-This reduces the cost of splice() operation between the backing store 
-	and a destination file on that same file system (essentially,
-	only some filesystem accounting needs to be done).
-
- ODO: Robert, the current 'backing_store' logic is probably wrong:
-	we want to allow the user to specify which DIRECTORY PATH
-	the backing store should be created in, not necessarily what
-	its precise filename should be (I can't think of a case, can you?).
-Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp` 
-	for workable temp file creation mechanism.
-	*/
-cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
-{
-	cbuf_t *ret = NULL;
-
-	/* create cbuf */
-	ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, CBUF_P | CBUF_MALLOC, map_dir);
-	Z_die_if(!ret, "cbuf create failed");
-	/* cbuf_create_() will have padded the obj size and obj count to 
-		fit into powers of 2.
-	The backing store MUST have sufficient space for EACH cbufp_t in cbuf 
-		to point to a unique area of `obj_sz` length.
-		*/
-	obj_cnt = cbuf_obj_cnt(ret);	
-
-	/* make accounting structure */
-	cbufp_t f;	
-	memset(&f, 0x0, sizeof(f));
-
-	/* Map backing store.
-		Typecasts because of insidious overflow.
-		*/
-	f.iov.iov_len = ((uint64_t)obj_sz * (uint64_t)obj_cnt);
-	Z_die_if(!(
-		f.fd = sbfu_tmp_map(&f.iov, map_dir)
-		), "");
-	f.blk_iov.iov_len = obj_sz;
-	f.blk_iov.iov_base = f.iov.iov_base;
-
-	/* populate tracking structures 
-	Go through the motions of reserving cbuf blocks rather than
-		accessing ret->buf directly.
-	This is because cbuf will likely fudge the block size on creation, 
-		and we don't want to care about that.
-		*/
-	uint32_t pos = cbuf_snd_res_m(ret, obj_cnt);
-	Z_die_if(pos == -1, "");
-	cbufp_t *p;
-	for (f.blk_id=0; f.blk_id < obj_cnt; 
-		f.blk_id++, f.blk_iov.iov_base += obj_sz) 
-	{
-		p = cbuf_offt(ret, pos, f.blk_id);
-		memcpy(p, &f, sizeof(f));
-		p->blk_offset = f.blk_iov.iov_base - f.iov.iov_base;
-	};
-	cbuf_snd_rls_m(ret, obj_cnt);
-	/* 'receive' so all blocks are marked as unused */
-	pos = cbuf_rcv_res_m(ret, obj_cnt);
-	Z_die_if(pos == -1, "");
-	cbuf_rcv_rls_m(ret, obj_cnt);
-
-	return ret;
-out:
-	cbuf_free_(ret);
-	return NULL;
-}
-
 
 /*	cbuf_zero()
 Zero the entire buffer.
@@ -235,7 +156,7 @@ uint32_t cbuf_snd_res(cbuf_t *buf, size_t cnt)
 					&buf->snd_pos);
 }
 
-/*	cbuf_snd_res_m_cap()
+/*	cbuf_snd_res_cap()
 Tries to reserve a variable number of buffer slots up to *res_cnt.
 If successful, returns `pos` and *res_cnt is set to the
 	amount of slots reserved.
