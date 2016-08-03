@@ -1,6 +1,13 @@
 #include "zcio.h"
 #include "cbuf_int.h"
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+	/* mkostemp, splice */
+#endif
+
+#include <fcntl.h> /* splice() */
+
 /*
 	Functions for splicing memory in and out of cbuf blocks.
 
@@ -8,132 +15,60 @@
 	thread @ http://yarchive.net/comp/linux/splice.html
 */
 
-
-/*	cbuf_blk_data_len()
-
-Returns the SIZE OF USABLE DATA in a cbuf block.
-Typically, this is set when splice()ing data into the block,
-	or by calling _set_data_len() directly.
-returns data_len or -1 on error;
-	*/
-size_t zcio_blk_data_len(cbuf_t *b, uint32_t pos, int i)
-{
-	size_t ret;
-
-	/* If this cbuf has a backing store, block is a tracking stuct. */
-	if (b->cbuf_flags) {
-		struct zcio *f = zcio_offt(b, pos, i);
-		ret = f->data_len;
-
-	/* Otherwise, data length is in the first 8B of the block itself.
-		Typecast and dereference.
-		*/
-	} else {
-		size_t *data_len = NULL;
-		zcio_lofft(b, pos, i, &data_len);
-		ret = *data_len;
-	}
-
-	if (ret > zcio_splice_max(b)) {
-		Z_err("cbuf 0x%lx pos %d i %d thinks it's size is %ld. likely corrupt.", 
-			(uint64_t)b, pos, i, ret);
-		ret=0;
-	}
-	return ret;
-}
-
-/*	cbuf_blk_set_data_len()
-Explicitly set the size of "usable" data in a cbuf.
-Using this function, caller can directly control 
-	e.g.: how many bytes will be splice()d out of this cbuf block.
-
-returns 0 on success.
-	*/
-int	zcio_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
-{
-	int err_cnt = 0;
-	Z_die_if(!b, "args");
-	if (b->cbuf_flags) {
-		struct zcio *f = cbuf_offt(b, pos, i);
-		f->data_len = data_len;
-	} else {
-		size_t *data_len_buf = NULL;
-		cbuf_lofft(b, pos, i, &data_len_buf);
-		*data_len_buf = data_len;
-	}
-
-out:
-	return err_cnt;
-}
-
 /*	cbuf_splice_from_pipe()
-Splice()s at most 'size' bytes from 'a_pipe[0]' into the cbuf block at 'pos', offset 'i'.
-Will not splice more than cbuf_splice_max() bytes.
+Splice()s at most 'size' bytes from 'a_pipe[0]' into the backing store
+	of a zcio buffer.
+Will not splice more than zcio_splice_max() bytes.
 
 returns 'data_len' == nr. of bytes moved.
 'data_len' may be less than 'size', and is 0 on error.
-
-'data_len' is saved WITH the block, and can be retrieved with cbuf_blk_data_len().
 
 NOTE that if 'buf' is CBUF_MALLOC, the mechanics are identical save that 
 	the data is read() instead of splice()ed.
 	*/
 size_t	zcio_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size)
 {
-	size_t *data_len = NULL;
-	loff_t temp_offset = 0;
-	int fd = 0;
-
-	/* splice params: backing store */
-	if (b->cbuf_flags) {
-		struct zcio *f = cbuf_offt(b, pos, i);
-		temp_offset = f->blk_offset;
-		data_len = &f->data_len;
-		fd = f->fd; /* fd is the backing store's fd */
-
-	/* params: cbuf block itself as splice destination */
-	} else {
-		temp_offset = cbuf_lofft(b, pos, i, &data_len); /* sets data_len */
-		fd = b->mmap_fd; /* fd is the cbuf itself */
-	}
+	struct zcio_store *zs = (void *)b->user_bits;
+	struct zcio_block *zb = cbuf_offt(b, pos, i);
 
 	/* validate size of requested splice operation */
 	if (!size) {
-		*data_len = 0;
+		zb->data_len = 0;
 		return 0;
 	}
-	 if (size > cbuf_splice_max(b))
-		size = cbuf_splice_max(b);
+	if (size > zb->blk_iov.iov_len)
+		size = zb->blk_iov.iov_len;
 
-	/* read() if data is going a malloc()ed 'buf', otherwise splice() */
 	do {
-		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P))
-			*data_len = read(fd_pipe_read, b->buf + temp_offset, size);
+		/* read() if data is going a malloc()ed 'buf' */
+		if (!zs->fd)
+			zb->data_len = read(fd_pipe_read, zs->iov.iov_base + zb->blk_offset, size);
+		/* otherwise splice() */
 		else
-			*data_len = splice(fd_pipe_read, NULL, fd, &temp_offset, 
+			zb->data_len = splice(fd_pipe_read, NULL, fd, &temp_offset, 
 				size, SPLICE_F_NONBLOCK);
 	/* ... notice we don't loop on a PARTIAL read/splice */
-	//} while ((*data_len  == 0 || *data_len == -1) && errno == EWOULDBLOCK 
-	} while ((*data_len == -1) && errno == EWOULDBLOCK 
+	//} while ((zb->data_len  == 0 || zb->data_len == -1) && errno == EWOULDBLOCK 
+	} while ((zb->data_len == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
 		&& !CBUF_YIELD() /* don't spinlock */
 		&& !(errno = 0)); /* resets errno ONLY if we will retry */
 	
 
 	/* if got error, reset to "nothing" */
-	if (*data_len == -1) {
+	if (zb->data_len == -1) {
 		Z_err("splice size=%ld", size);
-		*data_len = 0;
+		zb->data_len = 0;
 	}
 	/* We could have spliced an amount LESS than requested.
 	That is not an error: caller should check the return value
 		and act accordingly.
 		*/
-	Z_err_if(*data_len == 0, "*data_len %ld; size %ld", *data_len, size);
+	Z_err_if(zb->data_len == 0, "zb->data_len %ld; size %ld", zb->data_len size);
 	//Z_err_if(*cbuf_head != size, "*cbuf_head %ld; size %ld", *cbuf_head, size);
 
 	/* done */
-	return *data_len;
+	return zb->data_len;
 }
 
 /*	cbuf_splice_to_pipe()
@@ -171,9 +106,9 @@ size_t	zcio_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write
 	/* sanity */
 	if (*data_len == 0)
 		return 0;
-	if (*data_len > cbuf_splice_max(b)) {
+	if (*data_len > zcio_splice_max(b)) {
 		Z_err("corrupt splice size of %ld, max is %ld", 
-			*data_len, cbuf_splice_max(b));
+			*data_len, zcio_splice_max(b));
 		return 0;
 	}
 

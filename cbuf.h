@@ -183,15 +183,8 @@ pos & sz_overflow_
 288 & 255 = 32
 */
 
-#ifndef _GNU_SOURCE
-	#define _GNU_SOURCE
-	/* mkostemp, splice */
-#endif
-#include <fcntl.h> /* splice() */
 #include <stdint.h> /* [u]int[blah] */
-#include <stdlib.h> /* mkostemp */
-#include <sys/mman.h> /* mmap */
-#include <sys/stat.h>
+//#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -232,7 +225,7 @@ define CBUF_P		0x01	/* This cbuf contains pointers to the data,
 
 #endif
 
-#define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.
+#define CBUF_CHK_CLOSING	0x01	/* cbuf closing. stop checkpointing.
 					This is the high bit in `chk_cnt` below.
 						*/
 
@@ -275,8 +268,9 @@ typedef struct {
 	uint32_t	rcv_reserved;	/* Reserved by readers(s). */
 	uint32_t	rcv_uncommit;	/* Not committed because other readers I/P. */
 
-	/* TODO: this goes away, and becomes an unusd uint64_t >:) */
-	uint64_t	unused;
+	uint64_t	user_bits;	/* Unused by the algorithm AT THE MOMENT.
+					The risk is yours >:)
+						*/
 }__attribute__ ((packed))	cbuf_t;
 
 
@@ -307,25 +301,20 @@ Z_INL_FORCE uint32_t cbuf_sz_buf(cbuf_t *b) { return b->overflow_ + 1; }
 Z_INL_FORCE uint32_t cbuf_sz_obj(cbuf_t *b) { return 1 << b->sz_bitshift_; }
 Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bitshift_; }
 
-/* create/free (with backward-compatible functions) */
-cbuf_t *cbuf_create1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
-Z_INL_FORCE cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt) 
-	{ return cbuf_create1(obj_sz, obj_cnt, NULL); }
-
-cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
+/* create/free */
+cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
 int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 
 /* reserve */
-/*  TODO: keep cbuf_cnd_res_m_cap() .. just call it "snd_res" */
-uint32_t cbuf_snd_res(cbuf_t *buf, size_t cnt); /* rename */
-uint32_t cbuf_snd_res_cap(cbuf_t *buf, size_t *res_cnt);  /* rename */
-uint32_t cbuf_rcv_res(cbuf_t *buf, size_t cnt); /* rename */
-uint32_t cbuf_rcv_res_cap(cbuf_t *buf, size_t *res_cnt); /* rename */
+uint32_t cbuf_snd_res(cbuf_t *buf, size_t cnt);
+uint32_t cbuf_snd_res_cap(cbuf_t *buf, size_t *res_cnt);
+uint32_t cbuf_rcv_res(cbuf_t *buf, size_t cnt);
+uint32_t cbuf_rcv_res_cap(cbuf_t *buf, size_t *res_cnt);
 
 /* release */
-void cbuf_snd_rls(cbuf_t *buf, size_t cnt); /* rename */
-void cbuf_rcv_rls(cbuf_t *buf, size_t cnt); /* rename */
+void cbuf_snd_rls(cbuf_t *buf, size_t cnt);
+void cbuf_rcv_rls(cbuf_t *buf, size_t cnt);
 
 /* sophisticated buffer tricks */
 void		cbuf_snd_rls_mscary(cbuf_t *buf, size_t cnt);
