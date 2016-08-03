@@ -196,7 +196,7 @@ pos & sz_overflow_
 #include <unistd.h>
 
 #include "zed_dbg.h"
-#include "zcio.h"
+//#include "zcio.h"
 
 /*	TODO: changes to naming to implement:
 
@@ -280,24 +280,6 @@ typedef struct {
 }__attribute__ ((packed))	cbuf_t;
 
 
-/*
-	CBUF_P
-
-TODO: evaluate the idea of cbuf's ALWAYS having a backing store 
-	(whether it be malloc()ed or mmap()ed).
-	fuck it - this will be rewritten
-*/
-typedef struct {
-	/* backing store variables: identical values in all blocks of a cbuf_p */
-	int		fd;
-	int		pad_int;
-	struct iovec	iov;
-	/* block-specific variables: different from block to block */
-	uint64_t	blk_id;
-	struct iovec	blk_iov;
-	loff_t		blk_offset;
-	size_t		data_len;
-}__attribute__ ((packed))	cbufp_t;
 
 
 /*
@@ -332,9 +314,6 @@ Z_INL_FORCE cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
 
-Z_INL_FORCE cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt)
-	{ return cbuf_create_p1(obj_sz, obj_cnt, NULL); }
-
 int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 
@@ -361,27 +340,6 @@ cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b);
 int		cbuf_checkpoint_verif(cbuf_t *buf, cbuf_chk_t *checkpoint);
 int		cbuf_checkpoint_loop(cbuf_t *buf);
 
-/* splice
-TODO: move to ZCIO
-*/
-Z_INL_FORCE size_t cbuf_splice_max(cbuf_t *b)
-{
-	/* if buffer has a backing store, get length of one of the blocks */
-	if (b->cbuf_flags)
-		return ((cbufp_t *)b->buf)->blk_iov.iov_len;
-
-	/* if not, subtract the size of a header from `sz_obz` and return this */
-	return cbuf_sz_obj(b) - sizeof(size_t);
-}
-size_t	cbuf_blk_data_len(cbuf_t *b, uint32_t pos, int i);
-int	cbuf_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t len);
-size_t	cbuf_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size);
-size_t	cbuf_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write, 
-				loff_t sub_offt, size_t sub_len);
-Z_INL_FORCE size_t cbuf_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
-{
-	return cbuf_splice_to_pipe_sub(b, pos, i, fd_pipe_write, 0, 0);
-}
 
 /*	cbuf_offt()
 Deliver the memory address at the beginning of the nth in a 
@@ -397,6 +355,4 @@ Z_INL_FORCE void *cbuf_offt(cbuf_t *buf, uint32_t start_pos, uint32_t n)
 	return buf->buf + (start_pos & buf->overflow_);
 }
 
-//SIRIO: I can't remember if I was supposed to delete cbuf_lofft or if I've 
-//actually done this wrong....  
 #endif /* cbuf_h_ */
