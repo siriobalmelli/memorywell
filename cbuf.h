@@ -313,7 +313,6 @@ Z_INL_FORCE cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 	{ return cbuf_create1(obj_sz, obj_cnt, NULL); }
 
 cbuf_t *cbuf_create_malloc(uint32_t obj_sz, uint32_t obj_cnt);
-
 int	cbuf_zero(cbuf_t *buf);
 void	cbuf_free(cbuf_t *buf);
 

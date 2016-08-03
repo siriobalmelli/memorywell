@@ -7,6 +7,11 @@
 #include "zed_dbg.h"
 
 
+#ifndef _GNU_SOURCE
+	#define _GNU_SOURCE
+	/* mkostemp, splice */
+#endif
+#include <fcntl.h> /* splice() */
 #include "sbfu.h" /* For backing store operations: cbufp_ only
 			TODO: put ONLY in ZCIO.
 			*/
@@ -38,22 +43,19 @@ TODO: move to ZCIO
 Z_INL_FORCE size_t zcio_splice_max(cbuf_t *b)
 {
 	/* if buffer has a backing store, get length of one of the blocks */
-	if (b->cbuf_flags & CBUF_P)
+	if (b->cbuf_flags)
 		return ((struct zcio *)b->buf)->blk_iov.iov_len;
 
 	/* if not, subtract the size of a header from `sz_obz` and return this */
 	return cbuf_sz_obj(b) - sizeof(size_t);
 }
 
-//this creates a buffer with accounting structures point to data elsewhere
-cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
-
 size_t	zcio_blk_data_len(cbuf_t *b, uint32_t pos, int i);
 int	zcio_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t len);
-size_t	zcio_splice_from_pipe(int fd_pipe_read, struct zcio *b, uint32_t pos, int i, size_t size);
+size_t	zcio_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size);
 size_t	zcio_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write, 
 				loff_t sub_offt, size_t sub_len);
-Z_INL_FORCE size_t zcio_splice_to_pipe(struct zcio *b, uint32_t pos, int i, int fd_pipe_write)
+Z_INL_FORCE size_t zcio_splice_to_pipe(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write)
 {
 	return zcio_splice_to_pipe_sub(b, pos, i, fd_pipe_write, 0, 0);
 }
@@ -72,5 +74,11 @@ Z_INL_FORCE void *zcio_offt(cbuf_t *buf, uint32_t start_pos, uint32_t n)
 	return buf->buf + (start_pos & buf->overflow_);
 }
 
+//this creates a buffer with accounting structures point to data elsewhere
+cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir);
+
+
+Z_INL_FORCE cbuf_t *cbuf_create_p(uint32_t obj_sz, uint32_t obj_cnt)
+	{ return cbuf_create_p1(obj_sz, obj_cnt, NULL); }
 
 #endif //ZCIO_H

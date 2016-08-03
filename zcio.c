@@ -1,4 +1,5 @@
 #include "zcio.h"
+#include "cbuf_int.h"
 
 /*
 	Functions for splicing memory in and out of cbuf blocks.
@@ -20,8 +21,8 @@ size_t zcio_blk_data_len(cbuf_t *b, uint32_t pos, int i)
 	size_t ret;
 
 	/* If this cbuf has a backing store, block is a tracking stuct. */
-	if (b->zcio_flags & CBUF_P) {
-		cbufp_t *f = zcio_offt(b, pos, i);
+	if (b->cbuf_flags) {
+		struct zcio *f = zcio_offt(b, pos, i);
 		ret = f->data_len;
 
 	/* Otherwise, data length is in the first 8B of the block itself.
@@ -48,12 +49,12 @@ Using this function, caller can directly control
 
 returns 0 on success.
 	*/
-int	zcio_blk_set_data_len(struct zcio *b, uint32_t pos, int i, size_t data_len)
+int	zcio_blk_set_data_len(cbuf_t *b, uint32_t pos, int i, size_t data_len)
 {
 	int err_cnt = 0;
 	Z_die_if(!b, "args");
-	if (b->cbuf_flagsP) {
-		zcio *f = cbuf_offt(b, pos, i);
+	if (b->cbuf_flags) {
+		struct zcio *f = cbuf_offt(b, pos, i);
 		f->data_len = data_len;
 	} else {
 		size_t *data_len_buf = NULL;
@@ -77,15 +78,15 @@ returns 'data_len' == nr. of bytes moved.
 NOTE that if 'buf' is CBUF_MALLOC, the mechanics are identical save that 
 	the data is read() instead of splice()ed.
 	*/
-size_t	zcio_splice_from_pipe(int fd_pipe_read, struct zcio *b, uint32_t pos, int i, size_t size)
+size_t	zcio_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size)
 {
 	size_t *data_len = NULL;
 	loff_t temp_offset = 0;
 	int fd = 0;
 
 	/* splice params: backing store */
-	if (b->cbuf_flags & CBUF_P) {
-		cbufp_t *f = cbuf_offt(b, pos, i);
+	if (b->cbuf_flags) {
+		struct zcio *f = cbuf_offt(b, pos, i);
 		temp_offset = f->blk_offset;
 		data_len = &f->data_len;
 		fd = f->fd; /* fd is the backing store's fd */
@@ -156,7 +157,7 @@ size_t	zcio_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write
 
 	/* params: backing store */
 	if (b->cbuf_flags) {
-		cbufp_t *f = cbuf_offt(b, pos, i);
+		struct zcio *f = cbuf_offt(b, pos, i);
 		data_len = &f->data_len;
 		temp_offset = f->blk_offset;
 		fd = f->fd; /* fd is backing store */
@@ -222,7 +223,6 @@ size_t	zcio_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write
 }
 
 
-/////// BELOW NEEDS TO GO INTO ZCIO/////////////////////////////////
 /*	cbuf_create_p1()
 Creates a temporary "backing store" mmap()ed to the file path
 	requested by 'backing_store'.
@@ -253,7 +253,7 @@ cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 	cbuf_t *ret = NULL;
 
 	/* create cbuf, passing 0x0 as flag, cause malloc only */
-	ret = cbuf_create_(sizeof(cbufp_t), obj_cnt, 0x0, map_dir);
+	ret = cbuf_create_(sizeof(struct zcio), obj_cnt, 0x0, map_dir);
 	Z_die_if(!ret, "cbuf create failed");
 	/* cbuf_create_() will have padded the obj size and obj count to 
 		fit into powers of 2.
@@ -263,7 +263,7 @@ cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 	obj_cnt = cbuf_obj_cnt(ret);	
 
 	/* make accounting structure */
-	cbufp_t f;	
+	struct zcio f;	
 	memset(&f, 0x0, sizeof(f));
 
 	/* Map backing store.
@@ -281,22 +281,22 @@ cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 		accessing ret->buf directly.
 	This is because cbuf will likely fudge the block size on creation, 
 		and we don't want to care about that.
-		*/
-	uint32_t pos = cbuf_snd_res_m(ret, obj_cnt);
+	 	*/
+	uint32_t pos = cbuf_snd_res(ret, obj_cnt);
 	Z_die_if(pos == -1, "");
-	cbufp_t *p;
+	struct zcio *p;
 	for (f.blk_id=0; f.blk_id < obj_cnt; 
 		f.blk_id++, f.blk_iov.iov_base += obj_sz) 
-	{
+	{ 
 		p = cbuf_offt(ret, pos, f.blk_id);
 		memcpy(p, &f, sizeof(f));
 		p->blk_offset = f.blk_iov.iov_base - f.iov.iov_base;
 	};
-	cbuf_snd_rls_m(ret, obj_cnt);
+	cbuf_snd_rls(ret, obj_cnt);
 	/* 'receive' so all blocks are marked as unused */
-	pos = cbuf_rcv_res_m(ret, obj_cnt);
+	pos = cbuf_rcv_res(ret, obj_cnt);
 	Z_die_if(pos == -1, "");
-	cbuf_rcv_rls_m(ret, obj_cnt);
+	cbuf_rcv_rls(ret, obj_cnt);
 
 	return ret;
 out:
