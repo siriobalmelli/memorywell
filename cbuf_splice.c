@@ -7,6 +7,9 @@
 	thread @ http://yarchive.net/comp/linux/splice.html
 */
 
+//basically this is now zcio.c
+
+#if 0
 
 /*	cbuf_blk_data_len()
 
@@ -220,3 +223,5 @@ size_t	cbuf_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write
 	/* return */
 	return temp;
 }
+
+#endif //#if 0
