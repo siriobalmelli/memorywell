@@ -173,7 +173,7 @@ uint32_t cbuf_snd_res_cap(cbuf_t *buf, size_t *res_cnt)
 	if (*res_cnt > possible)
 		*res_cnt = possible; /* if it's less than ideal, reflect that */
 	/* say please */
-	return cbuf_snd_res_m(buf, *res_cnt);
+	return cbuf_snd_res(buf, *res_cnt);
 }
 
 /*	The _rcv_ family of functions is symmetric to the _snd_ ones
@@ -197,7 +197,7 @@ uint32_t cbuf_rcv_res_cap(cbuf_t *buf, size_t *res_cnt)
 	size_t possible = buf->sz_ready >> buf->sz_bitshift_;
 	if (*res_cnt > possible)
 		*res_cnt = possible;
-	return cbuf_rcv_res_m(buf, *res_cnt);
+	return cbuf_rcv_res(buf, *res_cnt);
 }
 
 
