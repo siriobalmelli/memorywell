@@ -11,21 +11,6 @@
 	4: unused bytes at time of free_()
 */
 
-static uint32_t cbuf_hugepage_sz; /* for future hugepages support */
-
-int __attribute__ ((constructor))	cbuf_const()
-{
-	// TODO: use a more, ahem, empirical method to determine this.
-	cbuf_hugepage_sz = 2048;	
-
-	return 0;
-}
-
-int __attribute__ ((destructor))	cbuf_dest()
-{
-	return 0;
-}
-
 /** INTERNALS **/
 
 /*	next_pow2()
@@ -67,10 +52,7 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 	b->cbuf_flags = flags;
 
 	uint32_t sz_aligned;
-	/* alignment: obj_sz must be able to accomodate an 8B 'data_len' (add that in),
-		and must then be a power of 2.
-	TODO: NO! BAD! there shall be no data_len at the tail every cbuf block.
-		*/
+	/* alignment: obj_sz must be a powqer of 2 */
 	sz_aligned = next_pow2(obj_sz );
 	Z_bail_if(sz_aligned < obj_sz,
 		"aligned obj_sz overflow: obj_sz=%d > sz_aligned=%d",
@@ -97,22 +79,10 @@ cbuf_t *cbuf_create_(uint32_t obj_sz,
 	b->sz_unused = buf_sz;
 	
 
-	/* Size assumptions MUST hold true regardless of 
-		whether 'buf' is malloc() || mmap() 
-		*/
-	size_t len = next_multiple(buf_sz, cbuf_hugepage_sz);
-	/* 
-	 * remvoving the malloc - mmap choice
-	 * just leaving the malloc
-	 * need to ask what cbuf_flags actually is!!!
-	 * */
-
 	/* MALLOC ONLY */
-	if (b->cbuf_flags) {
-		Z_die_if(!(
-			b->buf = malloc(len)
-			), "len = %ld", len);
-	}
+	Z_die_if(!(
+		b->buf = malloc(buf_sz)
+		), "buf_sz = %d", buf_sz);
 
 	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d flags='%s'", 
 		(uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b), 

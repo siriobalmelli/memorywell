@@ -233,7 +233,7 @@ define CBUF_P		0x01	/* This cbuf contains pointers to the data,
 /*
 	CBUF	
 */
-typedef struct {
+struct cbuf {
 	void		*buf;		/* Contiguous block of memory over which
 						the circular buffer iterates.
 						*/
@@ -271,7 +271,7 @@ typedef struct {
 	uint64_t	user_bits;	/* Unused by the algorithm AT THE MOMENT.
 					The risk is yours >:)
 						*/
-}__attribute__ ((packed))	cbuf_t;
+}__attribute__ ((packed));
 
 
 
@@ -285,62 +285,73 @@ typedef struct {
 } cbuf_chk_t;
 
 
-/* A convenient holder for pertinent reservation data,
-	defined here for convenience of library callers.
-NOT actually used in the library code anywhere.
-	*/
-typedef struct {
-	uint32_t	pos;
-	uint32_t	i;	/* loop iterator (would have been padding anyways) */
-	size_t		size;	/* how many blocks were reserved */
-}__attribute__ ((packed))	cbuf_res_t;
-
+/* TODO: replace function signatures in object file(s) */
+/* TODO: change all references to "obj" to be "blk" */
 
 /* compute some basic values out of a cbuf struct */
-Z_INL_FORCE uint32_t cbuf_sz_buf(cbuf_t *b) { return b->overflow_ + 1; }
-Z_INL_FORCE uint32_t cbuf_sz_obj(cbuf_t *b) { return 1 << b->sz_bitshift_; }
-Z_INL_FORCE uint32_t cbuf_obj_cnt(cbuf_t *b) { return cbuf_sz_buf(b) >> b->sz_bitshift_; }
+Z_INL_FORCE uint32_t cbuf_sz_buf(struct cbuf *cb) { return cb->overflow_ + 1; }
+Z_INL_FORCE uint32_t cbuf_sz_obj(struct cbuf *cb) { return 1 << cb->sz_bitshift_; }
+Z_INL_FORCE uint32_t cbuf_blk_cnt(struct cbuf *cb) { return cbuf_sz_buf(cb) >> cb->sz_bitshift_; }
 
 /* create/free */
-cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
-int	cbuf_zero(cbuf_t *buf);
-void	cbuf_free(cbuf_t *buf);
+struct cbuf *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
+int	cbuf_zero(struct cbuf *cb);
+void	cbuf_free(struct cbuf *cb);
 
 /* reserve */
-uint32_t cbuf_snd_res(cbuf_t *buf, size_t cnt);
-uint32_t cbuf_snd_res_cap(cbuf_t *buf, size_t *res_cnt);
-uint32_t cbuf_rcv_res(cbuf_t *buf, size_t cnt);
-uint32_t cbuf_rcv_res_cap(cbuf_t *buf, size_t *res_cnt);
+uint32_t cbuf_snd_res(struct cbuf *cb, size_t cnt);
+uint32_t cbuf_snd_res_cap(struct cbuf *cb, size_t *res_cnt);
+uint32_t cbuf_rcv_res(struct cbuf *cb, size_t cnt);
+uint32_t cbuf_rcv_res_cap(struct cbuf *cb, size_t *res_cnt);
 
 /* release */
-void cbuf_snd_rls(cbuf_t *buf, size_t cnt);
-void cbuf_rcv_rls(cbuf_t *buf, size_t cnt);
+void cbuf_snd_rls(struct cbuf *cb, size_t cnt);
+void cbuf_rcv_rls(struct cbuf *cb, size_t cnt);
 
 /* sophisticated buffer tricks */
-void		cbuf_snd_rls_mscary(cbuf_t *buf, size_t cnt);
-void		cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt);
-uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt);
-uint32_t	cbuf_actual_snd(cbuf_t *buf);
-uint32_t	cbuf_actual_rcv(cbuf_t *buf);
+void		cbuf_snd_rls_mscary(struct cbuf *cb, size_t cnt);
+void		cbuf_rcv_rls_mscary(struct cbuf *cb, size_t cnt);
+uint32_t	cbuf_rcv_held(struct cbuf *cb, size_t *out_cnt);
+uint32_t	cbuf_actual_snd(struct cbuf *cb);
+uint32_t	cbuf_actual_rcv(struct cbuf *cb);
 
 /* checkpoint */
-cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b);
-int		cbuf_checkpoint_verif(cbuf_t *buf, cbuf_chk_t *checkpoint);
-int		cbuf_checkpoint_loop(cbuf_t *buf);
+cbuf_chk_t	*cbuf_checkpoint_snapshot(struct cbuf *cb);
+int		cbuf_checkpoint_verif(struct cbuf *cb, cbuf_chk_t *checkpoint);
+int		cbuf_checkpoint_loop(struct cbuf *cb);
 
 
+struct cbuf_blk_ref {
+	uint32_t	pos;
+	uint32_t	i;
+}__attribute__ ((packed));
 /*	cbuf_offt()
-Deliver the memory address at the beginning of the nth in a 
+Deliver the memory address at the beginning of the 'i'th in a 
 	contiguous set of buffer blocks which starts at 'pos'.
 The contiguous set of buffer blocks may exist partly at the end of the
 	buffer memory block, and the rest of the way starting at the beginning.
 This function exists to hide the masking necessary to roll over from the end to
 	the beginning of the buffer.
 	*/
-Z_INL_FORCE void *cbuf_offt(cbuf_t *buf, uint32_t start_pos, uint32_t n)
+Z_INL_FORCE void *cbuf_offt(struct cbuf *cb, struct cbuf_blk_ref cbr)
 {
-	start_pos += n << buf->sz_bitshift_; /* purrformance */
-	return buf->buf + (start_pos & buf->overflow_);
+	cbr.pos += cbr.i << buf->sz_bitshift_; /* purrformance */
+	return buf->buf + (cbr.pos & buf->overflow_);
 }
+
+/* A convenient holder for pertinent reservation data,
+	defined here for convenience of library callers.
+NOT actually used in the library code anywhere.
+	*/
+struct cbuf_res {
+	union {
+	struct {
+	uint32_t		pos;
+	uint32_t		i;
+	};
+	struct cbuf_blk_ref	cbr;
+	};
+	size_t			size;	/* how many blocks were reserved */
+}__attribute__ ((packed));
 
 #endif /* cbuf_h_ */

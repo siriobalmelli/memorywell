@@ -54,18 +54,18 @@ Z_INL_FORCE void	zcio_blk_set_data_len(struct zcio_store *zs,
 }
 
 size_t			zcio_in_splice(struct zcio_store *zs, 
-					uint32_t pos, int i, 
+					struct cbuf_blk_ref dest,
 					int fd_pipe_from, size_t size);
 
 size_t			zcio_out_splice_sub(struct zcio_store *zs, 
-					uint32_t pos, int i, 
+					struct cbuf_blk_ref source,
 					int fd_pipe_to,
 					loff_t sub_offt, size_t sub_len);
 Z_INL_FORCE size_t	zcio_out_splice(struct zcio_store*zs, 
-					uint32_t pos, int i, 
+					struct cbuf_blk_ref source,
 					int fd_pipe_to)
 {
-	return zcio_out_splice_sub(zs, pos, i, fd_pipe_to, 0, 0);
+	return zcio_out_splice_sub(zs, source, fd_pipe_to, 0, 0);
 }
 
 size_t	zcio_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, size_t size);

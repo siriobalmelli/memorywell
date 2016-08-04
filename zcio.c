@@ -14,6 +14,123 @@
 	For background and Linus' approach re: splice() and vmsplice(), please see
 	thread @ http://yarchive.net/comp/linux/splice.html
 */
+/* Allocated a number of zcio_store structs given by block_sz and block_cnt
+ 
+   Question is: doesn't it also need to include the zcio_block struct, as
+   we also need to keep that one around?
+   Based on the fact that a cbuf_p struct was one large struct that was in each
+   buf block
+ 
+ */
+struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt)
+{
+	struct zcio_store* zs = (struct zcio_store*)calloc(sizeof(struct zcio_store), 1);
+
+	if (!zs)
+	{
+		Z_err("zcio_store calloc failed");
+	}
+
+	return zs;
+}
+
+/* free the given zcio_store struct */
+void			zcio_free(struct zcio_store *zs)
+{
+	if (!zs)
+		return;
+	void *temp = NULL;
+
+	/* TODO: implement this sexy thing everywhere */
+	__atomic_exchange(&zs->buf, NULL, (cbuf_t **)&temp, __ATOMIC_SEQ_CST);
+	if (temp)
+		cbuf_free(temp);
+
+	if (zs->iov.iov_base) {
+		/* free backing store (there is an SBFU function for the mapped case) */
+	}
+
+	free(zs);
+}
+
+size_t			zcio_in_splice(struct zcio_store *zs, 
+					struct cbuf_blk_ref dest,
+					int fd_pipe_from, size_t size)
+
+{
+	/* Splice from a pipe into memory backing store 
+		so from fd_pipe_from -> zs->fd */
+
+	if (!size)
+	{
+		Z_err("size is 0");
+		return 0;
+	}
+
+
+	// we need to send reserve and then splice
+	struct zcio_block *zb = cbuf_offt(zs->buf, dest);
+
+	
+
+	/* not sure what whether I need to loop here.. */
+	do {
+		if (!zs->fd) /* deal with the malloc case */
+			zb->data_len = read(fd_pipe_from, 
+					zs->iov.iov_base + zb->blk_offset, 
+					size);
+		else
+		zb->data_len = splice(fd_pipe_from, NULL,  
+					zs->fd, &zb->blk_offset, 
+					size,  
+					SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
+	/* notice we are not looping on a partial read/splice */
+	} while (zb->data_len == -1 && errno == EWOULDBLOCK
+		/* the below are tested/executed only if we would block: */ 
+		&& !CBUF_YIELD() /* don't spinlock */
+		&& !(errno = 0)); /* resets errno ONLY if we will retry */
+
+	if (zb->data_len == -1)
+	{
+		/*error */
+	}
+
+	return zb->data_len;
+}
+
+
+size_t			zcio_out_splice_sub(struct zcio_store *zs, 
+					uint32_t pos, int i, 
+					int fd_pipe_to,
+					loff_t sub_offt, size_t sub_len)
+{
+	/* Splice from backing store into pipe */
+
+
+	struct zcio_block* zb = cbuf_offt(zs->buf, pos, i);
+
+	if (!zs->fd)
+	{
+		Z_err("zs->fd is malloc");
+		return 0;
+	}
+
+	if(zb->data_len	== 0)
+		return 0;
+
+	/* sub-block? */
+	if (sub_len) {
+		if (sub_len > (uint64_t)zb->data_len - sub_offt)
+		{
+			return 0;
+		}
+		zb->data_len = sub_len;
+		zb->blk_offset = sub_offt;
+		
+
+	}
+	
+}
 
 /*	cbuf_splice_from_pipe()
 Splice()s at most 'size' bytes from 'a_pipe[0]' into the backing store
@@ -36,8 +153,8 @@ size_t	zcio_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 		zb->data_len = 0;
 		return 0;
 	}
-	if (size > zb->blk_iov.iov_len)
-		size = zb->blk_iov.iov_len;
+	if (size > zs->block_sz)
+		size = zs->block_sz;
 
 	do {
 		/* read() if data is going a malloc()ed 'buf' */
@@ -45,14 +162,13 @@ size_t	zcio_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 			zb->data_len = read(fd_pipe_read, zs->iov.iov_base + zb->blk_offset, size);
 		/* otherwise splice() */
 		else
-			zb->data_len = splice(fd_pipe_read, NULL, fd, &temp_offset, 
+			zb->data_len = splice(fd_pipe_read, NULL, zs->fd, &zb->blk_offset, 
 				size, SPLICE_F_NONBLOCK);
 	/* ... notice we don't loop on a PARTIAL read/splice */
-	//} while ((zb->data_len  == 0 || zb->data_len == -1) && errno == EWOULDBLOCK 
 	} while ((zb->data_len == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
-		&& !CBUF_YIELD() /* don't spinlock */
-		&& !(errno = 0)); /* resets errno ONLY if we will retry */
+		&& !cbuf_yield() /* don't spinlock */
+		&& !(errno = 0)); /* resets errno only if we will retry */
 	
 
 	/* if got error, reset to "nothing" */
@@ -64,7 +180,7 @@ size_t	zcio_splice_from_pipe(int fd_pipe_read, cbuf_t *b, uint32_t pos, int i, s
 	That is not an error: caller should check the return value
 		and act accordingly.
 		*/
-	Z_err_if(zb->data_len == 0, "zb->data_len %ld; size %ld", zb->data_len size);
+	Z_err_if(zb->data_len == 0, "zb->data_len %ld; size %ld", zb->data_len, size);
 	//Z_err_if(*cbuf_head != size, "*cbuf_head %ld; size %ld", *cbuf_head, size);
 
 	/* done */
@@ -85,42 +201,42 @@ Note: if CBUF_MMAP, vmsplice() is used.
 size_t	zcio_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write, 
 				loff_t sub_offt, size_t sub_len)
 {
-	int fd;
-	size_t *data_len;
-	loff_t temp_offset;
-	struct iovec iov;
+	struct zcio_store *zs = (void *)b->user_bits; //this is wrong
+	struct zcio_block *zb = cbuf_offt(b, pos, i);
+	
+	/* I removed the vmsplice read/write here when we had a malloc()d
+	 * buf,
+	 * not sure if that is correct,
+	 * as the splice_from_ function above still reads from pipe
+	 * if malloc() 
+	 *
+	 * I'm confus. :(
+	 *
+	 * */
 
-	/* params: backing store */
-	if (b->cbuf_flags) {
-		struct zcio *f = cbuf_offt(b, pos, i);
-		data_len = &f->data_len;
-		temp_offset = f->blk_offset;
-		fd = f->fd; /* fd is backing store */
 
-	/* params: cbuf block itself contains data */
-	} else {
-		temp_offset = cbuf_lofft(b, pos, i, &data_len);
-		fd = b->mmap_fd; /* fd is cbuf itself */
-	}
 
 	/* sanity */
-	if (*data_len == 0)
+	if (zb->data_len == 0)
 		return 0;
-	if (*data_len > zcio_splice_max(b)) {
+	if (zs->fd == 0) /* we have a malloc()ed buf */
+		return 0;
+
+/* 	if (*data_len > zcio_splice_max(b)) {
 		Z_err("corrupt splice size of %ld, max is %ld", 
 			*data_len, zcio_splice_max(b));
 		return 0;
 	}
-
+*/
 	/* sub-block? */
 	if (sub_len) {
-		if (sub_len > (int64_t)*data_len - sub_offt) {
+		if (sub_len > (int64_t)zb->data_len - sub_offt) {
 			Z_err("bad sub-block request: len %ld @offt %ld > *data_len %ld",
-				sub_len, sub_offt, *data_len);
+				sub_len, sub_offt, zb->data_len);
 			return 0;
 		}
-		data_len = &sub_len;
-		temp_offset += sub_offt;
+		zb->data_len = sub_len;
+		zb->blk_offset += sub_offt;
 	}
 
 	/* Pull chunk from buffer.
@@ -129,18 +245,10 @@ size_t	zcio_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write
 		*/
 	ssize_t temp;
 	do {
-		/* if 'buf' was malloc()ed, we must vmsplice() */
-		if (b->cbuf_flags & CBUF_MALLOC && !(b->cbuf_flags & CBUF_P)) {
-			/* set vmsplice-specific variables */
-			iov.iov_base = b->buf + temp_offset;
-			iov.iov_len = *data_len;
-			temp = vmsplice(fd_pipe_write, &iov, 1, SPLICE_F_GIFT);
-
-		/* all other cases: splice() */
-		} else  {
-			temp = splice(fd, &temp_offset, fd_pipe_write, 
-				NULL, *data_len, SPLICE_F_NONBLOCK);
-		}
+		/* buf will never be malloc()ed, so this goes */
+		/* we always just splice: splice() */
+		temp = splice(zs->fd, &zb->blk_offset, fd_pipe_write, 
+			NULL, zb->data_len, SPLICE_F_NONBLOCK);
 	} while ((temp == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 
 		&& !CBUF_YIELD() /* don't spinlock */
@@ -149,14 +257,11 @@ size_t	zcio_splice_to_pipe_sub(cbuf_t *b, uint32_t pos, int i, int fd_pipe_write
 	/* haz error? */
 	if (temp == -1) {
 		temp = 0;
-		Z_err("data_len=%lu", *data_len);
+		Z_err("data_len=%lu", zb->data_len);
 	}
-	//Z_err_if(temp != *data_len, "temp %ld; *data_len %ld", temp, *data_len);
 
-	/* return */
 	return temp;
 }
-
 
 /*	cbuf_create_p1()
 Creates a temporary "backing store" mmap()ed to the file path
@@ -183,12 +288,13 @@ This reduces the cost of splice() operation between the backing store
 Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp` 
 	for workable temp file creation mechanism.
 	*/
-cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
+cbuf_t *cbuf_create_p1(size_t obj_sz, uint32_t obj_cnt, char *map_dir)
 {
-	cbuf_t *ret = NULL;
+	/* make accounting structure */
+	struct zcio_store *zs  = calloc(1, sizeof(struct zcio_store));
 
 	/* create cbuf, passing 0x0 as flag, cause malloc only */
-	ret = cbuf_create_(sizeof(struct zcio), obj_cnt, 0x0, map_dir);
+	zs->buf = cbuf_create_(sizeof(struct zcio_block), obj_cnt, 0x0);
 	Z_die_if(!ret, "cbuf create failed");
 	/* cbuf_create_() will have padded the obj size and obj count to 
 		fit into powers of 2.
@@ -197,9 +303,10 @@ cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 		*/
 	obj_cnt = cbuf_obj_cnt(ret);	
 
-	/* make accounting structure */
-	struct zcio f;	
-	memset(&f, 0x0, sizeof(f));
+	
+	loff_t	blk_offset;
+	size_t	data_len;
+
 
 	/* Map backing store.
 		Typecasts because of insidious overflow.
@@ -208,8 +315,13 @@ cbuf_t *cbuf_create_p1(uint32_t obj_sz, uint32_t obj_cnt, char *map_dir)
 	Z_die_if(!(
 		f.fd = sbfu_tmp_map(&f.iov, map_dir)
 		), "");
-	f.blk_iov.iov_len = obj_sz;
-	f.blk_iov.iov_base = f.iov.iov_base;
+	
+	f.block_sz = obj_sz;
+	//no base..
+	//offset - block_sz = base
+
+	//f.blk_iov.iov_len = obj_sz;
+	//f.blk_iov.iov_base = f.iov.iov_base;
 
 	/* populate tracking structures 
 	Go through the motions of reserving cbuf blocks rather than
