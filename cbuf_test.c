@@ -46,7 +46,7 @@ int main()
 		Manually adjust for the 8B added by cbuf_create().
 		*/
 	uint32_t req_sz = (1UL << 31) - sizeof(size_t) -1;
-	cbuf_t *random = cbuf_create1(req_sz, 1, map_dir);
+	struct cbuf *random = cbuf_create(req_sz, 1);
 	Z_die_if(!random, "buf failed to create req_sz=%u", req_sz);
 	Z_die_if(cbuf_sz_buf(random) != req_sz+1+sizeof(size_t),
 		"buf_sz %u != req_sz %lu",
@@ -101,11 +101,11 @@ Re: turns 0 on success.
 int test_cbuf_single(int use_malloc)
 {
 	int err_cnt = 0;
-	cbuf_t *c = NULL;
+	struct cbuf *c = NULL;
 	if (use_malloc)
 		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else
-		c = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
+		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
 	int i;
@@ -135,11 +135,11 @@ out:
 int test_cbuf_steps(int use_malloc)
 {
 	int err_cnt = 0;
-	cbuf_t *c = NULL;
+	struct cbuf *c = NULL;
 	if (use_malloc)
 		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else
-		c = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
+		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
 	Z_die_if(!c, "expecting buffer");
 
 	int i, j;
@@ -152,20 +152,20 @@ int test_cbuf_steps(int use_malloc)
 		Z_die_if(pos == -1, "send reservation");
 		/* write all blocks */
 		for (j=0; j < STEP_SIZE; j++) {
-			seq = cbuf_offt(c, pos, j); 
+			seq = cbuf_offt(c,(struct cbuf_blk_ref) { .pos = pos, .i = j}); 
 			seq->i = i+j;
 		}
 		/* release */
-		cbuf_snd_rls_m(c, STEP_SIZE);
+		cbuf_snd_rls(c, STEP_SIZE);
 
 		/* do the same for the receive side */
-		pos = cbuf_rcv_res_m(c, STEP_SIZE);
+		pos = cbuf_rcv_res(c, STEP_SIZE);
 		Z_die_if(pos == -1, "receive reservation");
 		for (j=0; j < STEP_SIZE; j++) {
-			seq = cbuf_offt(c, pos, j);
+			seq = cbuf_offt(c, (struct cbuf_blk_ref) { .pos = pos, .i = j});
 			Z_die_if(seq->i != i+j, "wrong data");
 		}
-		cbuf_rcv_rls_m(c, STEP_SIZE);
+		cbuf_rcv_rls(c, STEP_SIZE);
 	}
 
 out:
@@ -203,11 +203,11 @@ int test_cbuf_threaded(int use_malloc)
 	global_sum = expected_sum = 0;
 
 	/* circ buf */
-	cbuf_t *buf = NULL;
+	struct cbuf *buf = NULL;
 	if (use_malloc)
 		buf = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
 	else 
-		buf = cbuf_create1(OBJ_SZ, OBJ_CNT, map_dir);
+		buf = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
 
 	Z_die_if(!buf, "fail to alloc");
 
@@ -265,7 +265,7 @@ void *rcv_thread(void *args)
 	volatile uint64_t busy_waits = 0; /* volatile because mts_jump */
 	mts_setup_thr_();
 
-	cbuf_t *b = (cbuf_t *)args;
+	struct cbuf *b = (struct cbuf *)args;
 	mts_jump_set_
 	mts_jump_reinit_exec_
 	mts_jump_end_block_
@@ -279,7 +279,7 @@ retry:
 		step_sz = STEP_SIZE;
 		if ( i + step_sz > NUMITER )
 		       step_sz = NUMITER - i;	
-		pos = cbuf_rcv_res_m_cap(b, &step_sz);
+		pos = cbuf_rcv_res_cap(b, &step_sz);
 		if (pos == -1) {
 			/* if no reservation available, busy-wait */
 			busy_waits++;
@@ -287,14 +287,14 @@ retry:
 			goto retry;
 		} else {
 			for (j=0; j < step_sz; j++) {
-				s = cbuf_offt(b, pos, j);
+				s = cbuf_offt(b,(struct cbuf_blk_ref) {.pos = pos, .i = j});
 				/* add to global sum; will be used to test data integrity */
 				__atomic_add_fetch(&global_sum, 
 					__atomic_load_n(&s->i, __ATOMIC_SEQ_CST),
 					__ATOMIC_SEQ_CST);
 				//Z_inf(0, "s @%08lx i = %d", (uint64_t)s, s->i);
 			}
-			cbuf_rcv_rls_m(b, step_sz);
+			cbuf_rcv_rls(b, step_sz);
 		}
 
 	}
@@ -309,7 +309,7 @@ void *snd_thread(void *args)
 	volatile uint64_t busy_waits = 0;
 	mts_setup_thr_();
 
-	cbuf_t *b = (cbuf_t *)args;
+	struct cbuf *b = (struct cbuf *)args;
 	mts_jump_set_
 	mts_jump_reinit_exec_
 	mts_jump_end_block_
@@ -324,7 +324,7 @@ retry:
 		step_sz = STEP_SIZE;
 		if ( i + step_sz > NUMITER )
 		       step_sz = NUMITER - i;	
-		pos = cbuf_snd_res_m_cap(b, &step_sz);
+		pos = cbuf_snd_res_cap(b, &step_sz);
 		if (pos == -1) {
 			/* if no reservation available, busy-wait */
 			busy_waits++;
@@ -333,13 +333,13 @@ retry:
 		} else {
 			/* add to the sequence */
 			for (j=0; j < step_sz; j++) {
-				s = cbuf_offt(b, pos, j);
+				s = cbuf_offt(b, (struct cbuf_blk_ref) { .pos = pos, .i = j});
 				/* this will be used for 'data integrity' check */
 				__atomic_store_n(&s->i, i+j, __ATOMIC_SEQ_CST);
 				/* ... and it will be checked against this: */
 				__atomic_add_fetch(&expected_sum, s->i, __ATOMIC_SEQ_CST);
 			}
-			cbuf_snd_rls_m(b, step_sz);
+			cbuf_snd_rls(b, step_sz);
 		}
 	}
 	//Z_inf(0, "tx: sent %d datums", i);
