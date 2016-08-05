@@ -12,7 +12,7 @@
 	5:	
 */
 
-cbuf_t *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
+struct cbuf *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 { 
 	return cbuf_create_ (obj_sz, obj_cnt, 0x0);
 }
@@ -26,7 +26,7 @@ returns 0 on success.
 Zeroing a buffer that has reserved blocks is considered bad form 
 	and will produce an error.
 */
-int cbuf_zero(cbuf_t *buf)
+int cbuf_zero(struct cbuf *buf)
 {
 	int err_cnt = 0;
 	Z_die_if(!buf, "no buffer");
@@ -37,7 +37,7 @@ out:
 	return err_cnt;
 }
 
-void cbuf_free(cbuf_t *buf)
+void cbuf_free(struct cbuf *buf)
 {
 	cbuf_free_(buf);
 }
@@ -52,7 +52,7 @@ Returns the POSITION of the reservation, not a memory address.
 	to cbuf_offt().
 Returns -1 on fail.
 	*/
-uint32_t cbuf_snd_res(cbuf_t *buf, size_t cnt)
+uint32_t cbuf_snd_res(struct cbuf *buf, size_t cnt)
 {
 	/* sanity */
 	if (!cnt)
@@ -72,7 +72,7 @@ If successful, returns `pos` and *res_cnt is set to the
 May fail, which returns -1 and leaves the value of *res_cnt
 	as the reservation size attempted.
 	*/
-uint32_t cbuf_snd_res_cap(cbuf_t *buf, size_t *res_cnt)
+uint32_t cbuf_snd_res_cap(struct cbuf *buf, size_t *res_cnt)
 {
 	/* bitshift sz_ready so it gives an OBJECT COUNT
 		as opposed to a count of BYTES
@@ -88,7 +88,7 @@ uint32_t cbuf_snd_res_cap(cbuf_t *buf, size_t *res_cnt)
 /*	The _rcv_ family of functions is symmetric to the _snd_ ones
 		above. Look there for detailed comments.
 	*/
-uint32_t cbuf_rcv_res(cbuf_t *buf, size_t cnt)
+uint32_t cbuf_rcv_res(struct cbuf *buf, size_t cnt)
 {
 	/* not asking for anything? bye. */
 	if (!cnt)
@@ -101,7 +101,7 @@ uint32_t cbuf_rcv_res(cbuf_t *buf, size_t cnt)
 					&buf->rcv_pos);
 }
 
-uint32_t cbuf_rcv_res_cap(cbuf_t *buf, size_t *res_cnt)
+uint32_t cbuf_rcv_res_cap(struct cbuf *buf, size_t *res_cnt)
 {
 	size_t possible = buf->sz_ready >> buf->sz_bitshift_;
 	if (*res_cnt > possible)
@@ -110,7 +110,7 @@ uint32_t cbuf_rcv_res_cap(cbuf_t *buf, size_t *res_cnt)
 }
 
 
-void cbuf_snd_rls(cbuf_t *buf, size_t cnt)
+void cbuf_snd_rls(struct cbuf *buf, size_t cnt)
 {
 	if (!cnt)
 		return;
@@ -122,7 +122,7 @@ void cbuf_snd_rls(cbuf_t *buf, size_t cnt)
 }
 
 
-void cbuf_rcv_rls(cbuf_t *buf, size_t cnt)
+void cbuf_rcv_rls(struct cbuf *buf, size_t cnt)
 { if (!cnt)
 		return;
 	cbuf_release__(buf, cnt << buf->sz_bitshift_, 
@@ -131,7 +131,7 @@ void cbuf_rcv_rls(cbuf_t *buf, size_t cnt)
 			&buf->sz_unused);
 }
 
-void cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt)
+void cbuf_rcv_rls_mscary(struct cbuf *buf, size_t cnt)
 {
 	if (!cnt)
 		return;
@@ -141,7 +141,7 @@ void cbuf_rcv_rls_mscary(cbuf_t *buf, size_t cnt)
 			&buf->sz_unused);
 }
 
-void cbuf_snd_rls_mscary(cbuf_t *buf, size_t cnt)
+void cbuf_snd_rls_mscary(struct cbuf *buf, size_t cnt)
 {
 	if (!cnt)
 		return;
@@ -163,7 +163,7 @@ This is ONLY safe to run when receiver is a single thread.
 
 return: same semantics as reservation calls: -1 is bad.
 	*/
-uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt)
+uint32_t	cbuf_rcv_held(struct cbuf *buf, size_t *out_cnt)
 {
 	if (!out_cnt)
 		return -1;
@@ -180,14 +180,14 @@ uint32_t	cbuf_rcv_held(cbuf_t *buf, size_t *out_cnt)
 	return (buf->snd_pos + buf->sz_unused) & buf->overflow_;
 }
 
-uint32_t	cbuf_actual_snd(cbuf_t *buf)
+uint32_t	cbuf_actual_snd(struct cbuf *buf)
 {
 	uint32_t ret;
 	cbuf_actuals__(buf, &ret, NULL);
 	return ret;
 }
 
-uint32_t	cbuf_actual_rcv(cbuf_t *buf)
+uint32_t	cbuf_actual_rcv(struct cbuf *buf)
 {
 	uint32_t ret;
 	cbuf_actuals__(buf, NULL, &ret);

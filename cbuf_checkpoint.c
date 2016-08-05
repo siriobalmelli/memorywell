@@ -46,7 +46,7 @@ The concept is that by recording both the "actual receiver" and the
 
 RETURNS: a pointer which can be fed to subsequent `verif()` calls.
 	*/
-cbuf_chk_t	*cbuf_checkpoint_snapshot(cbuf_t *b)
+cbuf_chk_t	*cbuf_checkpoint_snapshot(struct cbuf *b)
 {
 	/* obviates memory leak from function exiting for some other reason
 		before it is done looping on `checkpoint_verif()`.
@@ -83,7 +83,7 @@ Verifies state of the current cbuf at `b` against a checkpoint previously
 RETURNS 1 if all data through `snd_pos` at the time snapshot was taken 
 	has been consumed by receiver.
 	*/
-int		cbuf_checkpoint_verif(cbuf_t *buf, cbuf_chk_t *checkpoint)
+int		cbuf_checkpoint_verif(struct cbuf *buf, cbuf_chk_t *checkpoint)
 {
 	uint32_t actual_rcv = 0;
 	cbuf_actuals__(buf, NULL, &actual_rcv);
@@ -104,7 +104,7 @@ Loops until checkpoint is reached or surpassed, yielding/sleeping in the interim
 Returns: number of loop iterations waited.
 	-1 if loop was interrupted by closing buffer.
 	*/
-int		cbuf_checkpoint_loop(cbuf_t *buf)
+int		cbuf_checkpoint_loop(struct cbuf *buf)
 {
 	int i = 0; /* how many times do we loop? */
 	cbuf_chk_t *check = cbuf_checkpoint_snapshot(buf);

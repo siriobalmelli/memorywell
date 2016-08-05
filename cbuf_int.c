@@ -41,13 +41,13 @@ uint32_t next_multiple(uint32_t x, uint32_t mult)
 	return ((x + (mult -1)) / mult) * mult;
 }
 
-cbuf_t *cbuf_create_(uint32_t obj_sz, 
+struct cbuf *cbuf_create_(uint32_t obj_sz, 
 			uint32_t obj_cnt, 
 			uint8_t flags) 
 {
-	cbuf_t *b = NULL;
+	struct cbuf *b = NULL;
 	Z_die_if(!obj_sz, "expecting object size");
-	b = calloc(1, sizeof(cbuf_t));
+	b = calloc(1, sizeof(struct cbuf));
 	Z_die_if(!b, "no buf stat");
 	b->cbuf_flags = flags;
 
@@ -94,7 +94,7 @@ out:
 	return NULL;
 }
 
-void cbuf_free_(cbuf_t *buf)
+void cbuf_free_(struct cbuf *buf)
 {
 	/* sanity */
 	if (!buf)
@@ -134,7 +134,7 @@ void cbuf_free_(cbuf_t *buf)
 Reserve a chunk of bytes (identical mechanism for readers as for writers)
 Returns new 'pos' (aka: offset)
 	*/
-uint32_t cbuf_reserve__(cbuf_t		*buf,
+uint32_t cbuf_reserve__(struct cbuf	*buf,
 			size_t		blk_sz,
 			int64_t		*sz_source, 
 			uint32_t	*reserved,
@@ -159,7 +159,7 @@ uint32_t cbuf_reserve__(cbuf_t		*buf,
 	return __atomic_fetch_add(pos, blk_sz, __ATOMIC_SEQ_CST) & buf->overflow_;
 }
 
-void cbuf_release__(cbuf_t		*buf,
+void cbuf_release__(struct cbuf		*buf,
 			size_t		blk_sz,
 			uint32_t	*reserved,
 			uint32_t	*uncommit,
@@ -194,7 +194,7 @@ In a multi-threaded setting, "scary" is PROBABLY safe if caller knows
 
 Returns number of bytes released.
 	*/
-void cbuf_release_scary__(cbuf_t	*buf,
+void cbuf_release_scary__(struct cbuf	*buf,
 			size_t		blk_sz,
 			uint32_t	*reserved,
 			uint32_t	*uncommit,
@@ -242,7 +242,7 @@ Both `act_snd` and `act_rcv` are made up of a "pos" and a counter:
 
 Both values are masked so as to give actual position values.
 	*/
-void	cbuf_actuals__(cbuf_t *buf, uint32_t *act_snd, uint32_t *act_rcv)
+void	cbuf_actuals__(struct cbuf *buf, uint32_t *act_snd, uint32_t *act_rcv)
 {
 	/*  Use register as a gimmick to FORCE the order
 		in which variables are loaded.

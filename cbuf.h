@@ -335,8 +335,8 @@ This function exists to hide the masking necessary to roll over from the end to
 	*/
 Z_INL_FORCE void *cbuf_offt(struct cbuf *cb, struct cbuf_blk_ref cbr)
 {
-	cbr.pos += cbr.i << buf->sz_bitshift_; /* purrformance */
-	return buf->buf + (cbr.pos & buf->overflow_);
+	cbr.pos += cbr.i << cb->sz_bitshift_; /* purrformance */
+	return cb->buf + (cbr.pos & cb->overflow_);
 }
 
 /* A convenient holder for pertinent reservation data,
