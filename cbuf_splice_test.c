@@ -38,7 +38,7 @@ sig_atomic_t kill_flag = 0;
 int src_fd = 0, dst_fd = 0;
 void *src_buf = NULL, *dst_buf = NULL;
 size_t sz_src = 0, sz_sent = 0;
-cbuf_t *b = NULL;
+struct cbuf *b = NULL;
 
 void *splice_tx(void *args)
 {
@@ -67,7 +67,7 @@ void *splice_tx(void *args)
 			break;
 		while (sz_outstanding) {
 			step_sz = sz_outstanding / cbuf_splice_max(b) + 1;
-			pos = cbuf_snd_res_m_cap(b, &step_sz);
+			pos = cbuf_snd_res_cap(b, &step_sz);
 			if (pos == -1) {
 				pthread_yield();
 				continue;
@@ -77,7 +77,7 @@ void *splice_tx(void *args)
 				sz_outstanding -= temp;
 				sz_pushed += temp;
 			}
-			cbuf_snd_rls_m(b, step_sz);
+			cbuf_snd_rls(b, step_sz);
 		}
 	}
 	i = cbuf_checkpoint_loop(b);
