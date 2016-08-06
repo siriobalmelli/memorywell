@@ -23,15 +23,25 @@ void			zcio_free(struct zcio_store *zs)
 	void *temp = NULL;
 
 	/* TODO: implement this sexy thing everywhere */
-	__atomic_exchange(&zs->buf,(struct cbuf**)NULL,(struct cbuf**)&temp, __ATOMIC_SEQ_CST);
-	if (temp)
+	__atomic_exchange(&zs->buf,(struct cbuf**)&temp,(struct cbuf**)&temp, __ATOMIC_SEQ_CST);
+	if (temp) {
+		Z_inf(0, "cbuf_free");
 		cbuf_free(temp);
+	}
 
 	if (zs->iov.iov_base) {
 		/* free backing store (there is an SBFU function for the mapped case) */
+		sbfu_unmap(zs->fd, &zs->iov);
 	}
 
-	free(zs);
+
+	void *zstmp = NULL;
+	__atomic_exchange(&zs, (struct zcio_store**)&zstmp, (struct zcio_store**)&zstmp, 
+				__ATOMIC_SEQ_CST);
+	if (zstmp) {
+		Z_inf(0, "zstmp free");
+		free(zstmp);
+	}
 }
 
 size_t			zcio_in_splice(struct zcio_store *zs, 
@@ -49,17 +59,16 @@ size_t			zcio_in_splice(struct zcio_store *zs,
 	}
 
 
-	// we need to send reserve and then splice
+	// we need to create zcio_block from cbuf_offt 
 	struct zcio_block *zb = cbuf_offt(zs->buf, dest);
 
-	/* not sure what whether I need to loop here.. */
 	do {
 		if (!zs->fd) /* deal with the malloc case */
 			zb->data_len = read(fd_pipe_from, 
 					zs->iov.iov_base + zb->blk_offset, 
 					size);
 		else
-		zb->data_len = splice(fd_pipe_from, NULL,  
+			zb->data_len = splice(fd_pipe_from, NULL,  
 					zs->fd, &zb->blk_offset, 
 					size,  
 					SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
@@ -103,19 +112,17 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 					loff_t sub_offt, size_t sub_len)
 {
 	struct zcio_block *zb = cbuf_offt(zs->buf, cbr);
-	
+
 	/* sanity */
 	if (zb->data_len == 0)
 		return 0;
-	if (zs->fd == 0) /* we have a malloc()ed buf */
-		return 0;
 
-/* 	if (*data_len > zcio_splice_max(b)) {
+ 	if (zb->data_len > zs->block_sz) {
 		Z_err("corrupt splice size of %ld, max is %ld", 
-			*data_len, zcio_splice_max(b));
+			zb->data_len, zs->block_sz);
 		return 0;
 	}
-*/
+
 	/* sub-block? */
 	if (sub_len) {
 		if (sub_len > (int64_t)zb->data_len - sub_offt) {
@@ -158,6 +165,7 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 	}
 
 	return temp;
+
 }
 
 /*	zcio_new()
@@ -185,7 +193,8 @@ This reduces the cost of splice() operation between the backing store
 Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp` 
 	for workable temp file creation mechanism.
 	*/
-struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,enum zcio_store_type zctype)
+struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,
+		enum zcio_store_type zctype, const char *map_dir)
 {
 	/* make accounting structure */
 	struct zcio_store *zs  = calloc(1, sizeof(struct zcio_store));
@@ -215,11 +224,10 @@ struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,enum zcio_store_
 			break;
 		case MMAP:
 			Z_die_if((
-				zs->fd = sbfu_tmp_map(&zs->iov, NULL)
+				zs->fd = sbfu_tmp_map(&zs->iov, map_dir)
 				) < 1, "");
 	
 			break;
-		// assign malloc result to iov_base
 	}
 	zs->block_sz = block_sz;
 
@@ -251,7 +259,7 @@ struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,enum zcio_store_
 
 	return zs;
 out:
-	cbuf_free_(zs->buf);
+	zcio_free(zs);
 	return NULL;
 }
 

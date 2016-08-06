@@ -8,10 +8,7 @@
 #include <fcntl.h> /* splice() */
 #include <sys/uio.h>
 
-#include "sbfu.h" /* For backing store operations: cbufp_ only
-			TODO: put ONLY in ZCIO.
-			*/
-
+#include "sbfu.h" /* For backing store operations: cbufp_ only */
 #include "cbuf.h"
 
 /*
@@ -38,7 +35,9 @@ enum zcio_store_type
 	MMAP
 };
 
-struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,enum zcio_store_type zctype);
+struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,
+		enum zcio_store_type zctype, const char *map_dir);
+
 void			zcio_free(struct zcio_store *zs); 
 
 Z_INL_FORCE uint32_t	zcio_in_res(struct zcio_store *zs, uint32_t cnt)

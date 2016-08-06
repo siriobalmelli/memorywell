@@ -1,5 +1,7 @@
 #include "cbuf_int.h"
 
+#include <stdlib.h>
+
 #ifdef Z_BLK_LVL
 #undef Z_BLK_LVL
 #endif
@@ -115,13 +117,11 @@ void cbuf_free_(struct cbuf *buf)
 	/* sanity */
 	if (buf->buf) {
 		/* malloc() is straightforward */
-		if (buf->cbuf_flags) {
-			free(buf->buf);
+		free(buf->buf);
 		/* It must be mmap()'ed.
 		Avoid trying to free a '-1' (aka: MAP_FAILED).
 			*/
 		//delete this whole mmap else block.	
-		}
 		/* in all cases, set 'buf' NULL */
 		buf->buf = NULL;
 	}

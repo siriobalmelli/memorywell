@@ -1,5 +1,6 @@
 #include "cbuf.h"
 #include "mtsig.h"
+#include "zcio.h"
 #include <time.h>
 
 #define STEP_SIZE 32	/* How many blocks should we try to reserve at one time */
@@ -18,9 +19,9 @@ struct sequence {
 	char		padding[48];
 };
 
-int test_cbuf_single(int use_malloc);
-int test_cbuf_steps(int use_malloc);
-int test_cbuf_threaded(int use_malloc);
+int test_cbuf_single();
+int test_cbuf_steps();
+int test_cbuf_threaded();
 void *snd_thread(void *args);
 void *rcv_thread(void *args);
 
@@ -98,32 +99,32 @@ Tests a single-sender -> single-receiver configuration.
 
 Re: turns 0 on success.
 	*/
-int test_cbuf_single(int use_malloc)
+int test_cbuf_single()
 {
 	int err_cnt = 0;
 	struct cbuf *c = NULL;
-	if (use_malloc)
-		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
-	else
-		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
+	c = cbuf_create(OBJ_SZ, OBJ_CNT);
 	Z_die_if(!c, "expecting buffer");
 
 	int i;
 	struct sequence *seq;
+	uint32_t pos;
 	/* mult. by thread count so we do the same total iters as the threaded test */
 	for (i=0; i < NUMITER * THREAD_CNT; i++) {
 		/* reserve a 'step' of write blocks */
-		seq = cbuf_snd_res(c);
+		pos = cbuf_snd_res(c, 1);
+		seq = cbuf_offt(c, (struct cbuf_blk_ref) { .pos = pos, .i = 0});
 		Z_die_if(!seq, "sender single reservation");
 		seq->i = i;
 		/* release */
-		cbuf_snd_rls(c);
+		cbuf_snd_rls(c, 1);
 
 		/* do the same for the receive side */
-		seq = cbuf_rcv_res(c);
+		pos = cbuf_rcv_res(c, 1);	
+		seq = cbuf_offt(c, (struct cbuf_blk_ref) { .pos = pos, .i = 0});
 		Z_die_if(!seq, "receive reservation");
 		Z_die_if(seq->i != i, "wrong data");
-		cbuf_rcv_rls(c);
+		cbuf_rcv_rls(c, 1);
 	}
 
 out:
@@ -132,14 +133,12 @@ out:
 	return err_cnt;
 }
 
-int test_cbuf_steps(int use_malloc)
+int test_cbuf_steps()
 {
 	int err_cnt = 0;
 	struct cbuf *c = NULL;
-	if (use_malloc)
-		c = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
-	else
-		c = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
+
+	c = cbuf_create(OBJ_SZ, OBJ_CNT);
 	Z_die_if(!c, "expecting buffer");
 
 	int i, j;
@@ -148,7 +147,7 @@ int test_cbuf_steps(int use_malloc)
 	/* mult. by thread count so we do the same total iters as the threaded test */
 	for (i=0; i < NUMITER * THREAD_CNT; i += STEP_SIZE) {
 		/* reserve a 'step' of write blocks */
-		pos = cbuf_snd_res_m(c, STEP_SIZE);
+		pos = cbuf_snd_res(c, STEP_SIZE);
 		Z_die_if(pos == -1, "send reservation");
 		/* write all blocks */
 		for (j=0; j < STEP_SIZE; j++) {
@@ -180,7 +179,7 @@ If 'use_malloc' is set, uses a cbuf_malloc().
 
 returns 0 on success.
 	*/
-int test_cbuf_threaded(int use_malloc)
+int test_cbuf_threaded()
 {
 	int err_cnt = 0;
 	
@@ -204,10 +203,7 @@ int test_cbuf_threaded(int use_malloc)
 
 	/* circ buf */
 	struct cbuf *buf = NULL;
-	if (use_malloc)
-		buf = cbuf_create_malloc(OBJ_SZ, OBJ_CNT);
-	else 
-		buf = cbuf_create(OBJ_SZ, OBJ_CNT, map_dir);
+	buf = cbuf_create(OBJ_SZ, OBJ_CNT);
 
 	Z_die_if(!buf, "fail to alloc");
 

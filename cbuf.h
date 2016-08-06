@@ -184,12 +184,10 @@ pos & sz_overflow_
 */
 
 #include <stdint.h> /* [u]int[blah] */
-//#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
+//#include <sys/types.h>
+#include <unistd.h> /* usleep() */
 
 #include "zed_dbg.h"
-//#include "zcio.h"
 
 /*	TODO: changes to naming to implement:
 
@@ -225,7 +223,7 @@ define CBUF_P		0x01	/* This cbuf contains pointers to the data,
 
 #endif
 
-#define CBUF_CHK_CLOSING	0x01	/* cbuf closing. stop checkpointing.
+#define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.
 					This is the high bit in `chk_cnt` below.
 						*/
 

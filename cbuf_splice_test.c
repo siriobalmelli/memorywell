@@ -15,7 +15,7 @@
 /* unlink */
 #include <unistd.h>
 
-#include "cbuf.h"
+#include "zcio.h"
 #include "mtsig.h"
 #include "zed_dbg.h"
 
@@ -38,7 +38,7 @@ sig_atomic_t kill_flag = 0;
 int src_fd = 0, dst_fd = 0;
 void *src_buf = NULL, *dst_buf = NULL;
 size_t sz_src = 0, sz_sent = 0;
-struct cbuf *b = NULL;
+struct zcio_store *zs = NULL;
 
 void *splice_tx(void *args)
 {
@@ -66,21 +66,24 @@ void *splice_tx(void *args)
 		if (sz_outstanding == -1)
 			break;
 		while (sz_outstanding) {
-			step_sz = sz_outstanding / cbuf_splice_max(b) + 1;
-			pos = cbuf_snd_res_cap(b, &step_sz);
+			step_sz = sz_outstanding /zs->block_sz  + 1;
+			pos = cbuf_snd_res_cap(zs->buf, &step_sz);
 			if (pos == -1) {
 				pthread_yield();
 				continue;
 			}
 			for (i = 0; i < step_sz; i++) {
-				temp = cbuf_splice_from_pipe(fittings[0], b, pos, i, sz_outstanding);
+				//temp = cbuf_splice_from_pipe(fittings[0], zs->buf, pos, i, sz_outstanding);
+				temp = zcio_in_splice(zs,(struct cbuf_blk_ref) 
+						{ .pos = pos, .i = i}, 
+						fittings[0], sz_outstanding);
 				sz_outstanding -= temp;
 				sz_pushed += temp;
 			}
-			cbuf_snd_rls(b, step_sz);
+			cbuf_snd_rls(zs->buf, step_sz);
 		}
 	}
-	i = cbuf_checkpoint_loop(b);
+	i = cbuf_checkpoint_loop(zs->buf);
 	Z_inf(1, "%d iter on cbuf_checkpoint_verif", i);
 
 out:
@@ -113,14 +116,16 @@ void *splice_rx(void *args)
 
 	while (sz_sent < sz_src && !kill_flag) {
 		/* get buffer chunks, dump them all into local pipe */
-		step_sz = (sz_src - sz_sent) / cbuf_splice_max(b) + 1;
-		pos = cbuf_rcv_res_m_cap(b, &step_sz);
+		step_sz = (sz_src - sz_sent) / zs->block_sz + 1;
+		pos = cbuf_rcv_res_cap(zs->buf, &step_sz);
 		if (pos == -1) {
 			pthread_yield();
 			continue;
 		}
 		for (i=0; i < step_sz; i++) {
-			temp = cbuf_splice_to_pipe(b, pos, i, fittings[1]);
+			//temp = cbuf_splice_to_pipe(zs->buf, pos, i, fittings[1]);
+			temp = zcio_out_splice(zs, (struct cbuf_blk_ref) 
+					{.pos = pos, .i = i}, fittings[1]);
 			/* Immediately splice - otherwise fittings may be full
 				while we still have open cbufs.
 			Increments sz_sent as it writes.
@@ -129,7 +134,7 @@ void *splice_rx(void *args)
 				dst_fd, (loff_t *)&sz_sent, temp, 0);
 			Z_die_if(temp == -1, "write to dest file");
 		}
-		cbuf_rcv_rls_m(b, step_sz);
+		cbuf_rcv_rls(zs->buf, step_sz);
 	}
 
 out:
@@ -208,7 +213,7 @@ int test_splice_integrity()
 	int i;
 	int i_src_fd = 0, i_dst_fd = 0;
 	uint8_t *i_src_data = NULL, *i_dst_data = NULL;
-	cbuf_t *b = NULL;
+	///cbuf *b = NULL;
 
 	uint32_t pos;
 	size_t check;
@@ -235,12 +240,10 @@ int test_splice_integrity()
 	int plumbing[2] = { 0, 0 };
 	Z_die_if(pipe(plumbing), "bad turd-herder");
 
-	/* Make cbuf.
-	The trailing 8B of each cbuf block will be used as a 'data_len' variable.
-		hence, cbuf_create() will add 8 to requested 'obj_sz'.
-		*/
+	/* Make cbuf. */
 	Z_die_if(!(
-		b = cbuf_create1(i_size, 1, map_dir)
+		//b = cbuf_create(i_size, 1, map_dir)
+		zs = zcio_new(i_size, 1, MMAP, map_dir)
 		), "i_size=%d, map_dir='%s'",
 		i_size, map_dir);
 
@@ -252,21 +255,25 @@ int test_splice_integrity()
 	Z_die_if(check != i_size, "splice: src -> pipe");
 
 	/* pipe -> cbuf */
-	pos = cbuf_snd_res_m(b, 1);
+	pos = cbuf_snd_res(zs->buf, 1);
 	Z_die_if(pos == -1, "snd reserve");
-	check = cbuf_splice_from_pipe(plumbing[0], b, pos, 0, i_size);
+	//check = cbuf_splice_from_pipe(plumbing[0], zs->buf, pos, 0, i_size);
+	check = zcio_in_splice(zs, (struct cbuf_blk_ref) { .pos = pos, .i = 0},
+			plumbing[0], i_size);
 	Z_die_if(check != i_size, "splice: pipe -> cbuf");
-	cbuf_snd_rls(b);
+	cbuf_snd_rls(zs->buf, 1);
 
 	/* cbuf -> pipe */
-	pos = cbuf_rcv_res_m(b, 1);
+	pos = cbuf_rcv_res(zs->buf, 1);
 	Z_die_if(pos == -1, "rcv reserve");
-	check = cbuf_splice_to_pipe(b, pos, 0, plumbing[1]);
-	Z_die_if(check != i_size, "splice: cbuf -> pipe");
+	//check = cbuf_splice_to_pipe(zs->buf, pos, 0, plumbing[1]);
+	check = zcio_out_splice(zs, (struct cbuf_blk_ref) {.pos = pos, .i = 0},
+		       plumbing[1]);	
+	Z_die_if(check != i_size, "splice: cbuf -> pipe check=%ld, i_size=%d", 
+			check, i_size);
 	/* get a handle on cbuf memory so we can check it's contents directly */
-	size_t *data_len;
-	uint8_t *cbuf_mem_check = b->buf + cbuf_lofft(b, pos, 0, &data_len);
-	cbuf_rcv_rls(b); /* don't HAVE to release, we won't use cbuf again */
+	uint8_t *cbuf_mem_check = zs->buf->buf + zs->block_sz;
+	cbuf_rcv_rls(zs->buf, 1); /* don't HAVE to release, we won't use cbuf again */
 
 	/* write to destination file, verify data is clean */
 	splice(plumbing[0], NULL, i_dst_fd, NULL, i_size, 0);
@@ -288,9 +295,9 @@ int test_splice_integrity()
 
 out:
 
-	/* clean up cbuf */
-	if (b)
-		cbuf_free(b);
+	/* clean up zcio_store */
+	if (zs)
+		zcio_free(zs);
 
 	/* unmap */
 	if (i_src_data && i_src_data != MAP_FAILED)
@@ -372,7 +379,8 @@ int main(int argc, char **argv)
 		Z_die_if(setup_files(argc, argv), "");
 		/* 'splice' mode: splice file -> tx_pipe -> cbuf -> rx_pipe -> file */
 		Z_die_if(!(
-			b = cbuf_create1(BLK_SZ, BLK_CNT, map_dir)
+			//b = cbuf_create1(BLK_SZ, BLK_CNT, map_dir)
+			zs = zcio_new(BLK_SZ, BLK_CNT, MMAP, map_dir) //should this be mmap??
 			), "BLK_SZ=%d, BLK_CNT=%d, map_dir='%s'",
 			BLK_SZ, BLK_CNT, map_dir);
 		run_splice_test();
@@ -381,7 +389,8 @@ int main(int argc, char **argv)
 		Z_die_if(setup_files(argc, argv), "");
 		/* 'splice' mode: splice file -> tx_pipe -> cbuf(malloc) -> rx_pipe -> file */
 		Z_die_if(!(
-			b = cbuf_create_malloc(BLK_SZ, BLK_CNT)
+			//b = cbuf_create_malloc(BLK_SZ, BLK_CNT)
+			zs = zcio_new(BLK_SZ, BLK_CNT, MALLOC, NULL)
 			), "BLK_SZ=%d, BLK_CNT=%d, map_dir='%s'",
 			BLK_SZ, BLK_CNT, map_dir);
 		run_splice_test();
@@ -391,7 +400,8 @@ int main(int argc, char **argv)
 		Z_die_if(setup_files(argc, argv), "");
 		/* 'splice' mode: splice file -> tx_pipe -> cbuf(backing store) -> rx_pipe -> file */
 		Z_die_if(!(
-			b = cbuf_create_p1(BLK_SZ, BLK_CNT, map_dir)
+			//b = cbuf_create_p1(BLK_SZ, BLK_CNT, map_dir)
+			zs = zcio_new(BLK_SZ, BLK_CNT, MMAP, map_dir)
 			), "BLK_SZ=%d, BLK_CNT=%d, map_dir='%s'",
 			BLK_SZ, BLK_CNT, map_dir);
 		run_splice_test();
@@ -406,10 +416,10 @@ int main(int argc, char **argv)
 	Z_inf(0, "source: %ld, dest: %ld", sz_src, sz_sent);
 
 out:
-	/* close cbuf */
-	if (b) {
-		cbuf_free(b);
-		b = NULL;
+	/* close zcio_store */
+	if (zs) {
+		zcio_free(zs);
+		zs = NULL;
 	}
 
 	/* unmap memory 
