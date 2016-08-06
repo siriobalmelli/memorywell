@@ -11,6 +11,8 @@
 #include "sbfu.h" /* For backing store operations: cbufp_ only */
 #include "cbuf.h"
 
+#define ZCIO_SPLICE_FLAGS ( SPLICE_F_NONBLOCK | SPLICE_F_GIFT | SPLICE_F_MOVE )
+
 /*
 	ZCIO
 */

@@ -43,9 +43,9 @@ uint32_t next_multiple(uint32_t x, uint32_t mult)
 	return ((x + (mult -1)) / mult) * mult;
 }
 
-struct cbuf *cbuf_create_(uint32_t obj_sz, 
-			uint32_t obj_cnt, 
-			uint8_t flags) 
+struct cbuf *cbuf_create_(uint32_t	obj_sz, 
+			uint32_t	obj_cnt, 
+			uint8_t		flags) 
 {
 	struct cbuf *b = NULL;
 	Z_die_if(!obj_sz, "expecting object size");
@@ -64,10 +64,15 @@ struct cbuf *cbuf_create_(uint32_t obj_sz,
 		into a bitwise op.
 	Use sz_aligned just as a temp variable.
 		*/
+	uint8_t bitshift = 0;
 	while (sz_aligned > 1) {
 		sz_aligned >>= 1;
-		b->sz_bitshift_++;
+		bitshift++;
 	}
+	/* force assignment to const value of 'b->sz_bitshift_' 
+	AKA: b->sz_bitshift_ = bitshift;
+	*/
+	((uint8_t*)&b->sz_bitshift_)[0] = bitshift;
 
 	/* 'buf_sz' must be a multiple of obj_sz AND a power of 2 */
 	uint32_t buf_sz = obj_sz * obj_cnt;
@@ -77,8 +82,11 @@ struct cbuf *cbuf_create_(uint32_t obj_sz,
 		buf_sz, sz_aligned);
 	buf_sz = sz_aligned;
 	/* assign relevant cbuf_t values derived from 'buf_sz' */
-	b->overflow_ = buf_sz - 1; // used as a bitmask later 
 	b->sz_unused = buf_sz;
+	/* beware anti-typing monstrosity to evade 'const' restrictions
+	AKA: b->overflow_ = buf_sz - 1; // used as a bitmask later 
+	*/
+	((uint32_t*)&b->overflow_)[0] = buf_sz - 1;
 	
 
 	/* MALLOC ONLY */
@@ -114,17 +122,10 @@ void cbuf_free_(struct cbuf *buf)
 	}
 
 	/* if allocated, free buffer */
-	/* sanity */
-	if (buf->buf) {
-		/* malloc() is straightforward */
-		free(buf->buf);
-		/* It must be mmap()'ed.
-		Avoid trying to free a '-1' (aka: MAP_FAILED).
-			*/
-		//delete this whole mmap else block.	
-		/* in all cases, set 'buf' NULL */
-		buf->buf = NULL;
-	}
+	void *temp;
+	temp = (void *)__atomic_exchange_n(&buf->buf, NULL, __ATOMIC_SEQ_CST);
+	if (temp)
+		free(temp);
 	
 	Z_inf(3, "cbuf @0x%lx", (uint64_t)buf);
 	free(buf);
@@ -134,11 +135,11 @@ void cbuf_free_(struct cbuf *buf)
 Reserve a chunk of bytes (identical mechanism for readers as for writers)
 Returns new 'pos' (aka: offset)
 	*/
-uint32_t cbuf_reserve__(struct cbuf	*buf,
-			size_t		blk_sz,
-			int64_t		*sz_source, 
-			uint32_t	*reserved,
-			uint32_t	*pos)
+uint32_t cbuf_reserve__(struct cbuf		*buf,
+			size_t			blk_sz,
+			volatile int64_t	*sz_source, 
+			volatile uint32_t	*reserved,
+			volatile uint32_t	*pos)
 {
 	/* Are there sufficient unused 'source' slots? */ 
 	if (__atomic_sub_fetch(sz_source, blk_sz, __ATOMIC_SEQ_CST) < 0) { 
@@ -159,11 +160,11 @@ uint32_t cbuf_reserve__(struct cbuf	*buf,
 	return __atomic_fetch_add(pos, blk_sz, __ATOMIC_SEQ_CST) & buf->overflow_;
 }
 
-void cbuf_release__(struct cbuf		*buf,
-			size_t		blk_sz,
-			uint32_t	*reserved,
-			uint32_t	*uncommit,
-			int64_t		*sz_dest)
+void cbuf_release__(struct cbuf			*buf,
+			size_t			blk_sz,
+			volatile uint32_t	*reserved,
+			volatile uint32_t	*uncommit,
+			volatile int64_t	*sz_dest)
 {
 	if (*reserved < blk_sz) /* quit playing games with my heart, my heart... */
 		return;
@@ -194,11 +195,11 @@ In a multi-threaded setting, "scary" is PROBABLY safe if caller knows
 
 Returns number of bytes released.
 	*/
-void cbuf_release_scary__(struct cbuf	*buf,
-			size_t		blk_sz,
-			uint32_t	*reserved,
-			uint32_t	*uncommit,
-			int64_t		*sz_dest)
+void cbuf_release_scary__(struct cbuf		*buf,
+			size_t			blk_sz,
+			volatile uint32_t	*reserved,
+			volatile uint32_t	*uncommit,
+			volatile int64_t	*sz_dest)
 {
 	if (*reserved < blk_sz) {
 		Z_wrn("blk_sz %ld > %d reserved", blk_sz, *reserved);

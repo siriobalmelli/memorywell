@@ -28,8 +28,8 @@ void *rcv_thread(void *args);
 // RPA added for testing only so all the function signatures matched.
 char *map_dir = "/tmp";
 
-uint64_t global_sum = 0;
-uint64_t expected_sum = 0;
+volatile uint64_t rx_i_sum = 0;
+volatile uint64_t tx_i_sum = 0;
 
 #ifdef Z_BLK_LVL
 #undef Z_BLK_LVL
@@ -183,7 +183,7 @@ int test_cbuf_threaded()
 {
 	int err_cnt = 0;
 	
-	/* this is the expected sum of all 'i' loop iterators for all threads 
+	/* This is the expected sum of all 'i' loop iterators for all threads 
 		The logic to arrive at this was:
 			@1 : i = 0		0/1 = 0
 			@2 : i = 0+1		2/1 = 0.5
@@ -195,11 +195,11 @@ int test_cbuf_threaded()
 			@8 : (8-1)*0.5				= 3.5
 			@8 : 0+1+2+3+4+5+6+7 = (8-1)*0.5*8 = 28
 	*/
-	uint64_t final_verif = (NUMITER -1) * 0.5 * NUMITER * THREAD_CNT;
+	uint64_t verif_i_sum = (NUMITER -1) * 0.5 * NUMITER * THREAD_CNT;
 	/* reset global sums
 	(otherwise test will fail when run more than once)
 		*/
-	global_sum = expected_sum = 0;
+	rx_i_sum = tx_i_sum = 0;
 
 	/* circ buf */
 	struct cbuf *buf = NULL;
@@ -241,14 +241,14 @@ int test_cbuf_threaded()
 		exp_pos, buf->snd_pos, cbuf_sz_obj(buf), 
 		NUMITER, THREAD_CNT, buf->overflow_);
 	/* verify that expected sum is correct */
-	Z_err_if(expected_sum != final_verif, 
-		"expected_sum %ld - final_verif %ld = %ld",
-		expected_sum, final_verif, expected_sum - final_verif);
-	/* verify integrity of data */
-	Z_err_if(global_sum != expected_sum,
-		"global_sum %ld - expected_sum %ld = %ld\n\
+	Z_err_if(tx_i_sum != verif_i_sum, 
+		"tx_i_sum %ld - verif_i_sum %ld = %ld",
+		tx_i_sum, verif_i_sum, tx_i_sum - verif_i_sum);
+	/* Verify integrity of data */
+	Z_err_if(rx_i_sum != tx_i_sum,
+		"rx_i_sum %ld - tx_i_sum %ld = %ld\n\
 		... this is known to fail from time to time and Sirio has no clue WHY ;(((",
-		global_sum, expected_sum, global_sum - expected_sum);
+		rx_i_sum, tx_i_sum, rx_i_sum - tx_i_sum);
 
 out:
 	if (buf)
@@ -285,7 +285,7 @@ retry:
 			for (j=0; j < step_sz; j++) {
 				s = cbuf_offt(b,(struct cbuf_blk_ref) {.pos = pos, .i = j});
 				/* add to global sum; will be used to test data integrity */
-				__atomic_add_fetch(&global_sum, 
+				__atomic_add_fetch(&rx_i_sum, 
 					__atomic_load_n(&s->i, __ATOMIC_SEQ_CST),
 					__ATOMIC_SEQ_CST);
 				//Z_inf(0, "s @%08lx i = %d", (uint64_t)s, s->i);
@@ -333,14 +333,14 @@ retry:
 				/* this will be used for 'data integrity' check */
 				__atomic_store_n(&s->i, i+j, __ATOMIC_SEQ_CST);
 				/* ... and it will be checked against this: */
-				__atomic_add_fetch(&expected_sum, s->i, __ATOMIC_SEQ_CST);
+				__atomic_add_fetch(&tx_i_sum, 
+					__atomic_load_n(&s->i, __ATOMIC_SEQ_CST),
+					__ATOMIC_SEQ_CST);
 			}
 			cbuf_snd_rls(b, step_sz);
 		}
 	}
-	//Z_inf(0, "tx: sent %d datums", i);
 	i = cbuf_checkpoint_loop(b);
-	Z_inf(1, "%d iter on cbuf_checkpoint_verif", i);
 
 	mts_cleanup_thr_();
 	/* return number of busy-waits we had to go through */

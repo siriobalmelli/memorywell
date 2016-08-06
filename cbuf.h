@@ -97,6 +97,7 @@ CBUF
 	At creation time, all blocks are in the "unused" state.
 
 
+TODO: this is zcio now, update documentation
 CBUF_P flag == CBUF of Pointers
 
 	A cbuf can be created which does not itself contain data, 
@@ -189,13 +190,6 @@ pos & sz_overflow_
 
 #include "zed_dbg.h"
 
-/*	TODO: changes to naming to implement:
-
-	ZCIO: (Zero-Copy I/O library)
-		in | out
-		rsv | rls
-*/
-
 
 /*
 	DEFINES	
@@ -204,24 +198,6 @@ pos & sz_overflow_
 					without including threading libraries.
 
 */
-
-#if 0 //we want to remove these macros as cbuf will no longer or
-//have an option to do malloc or splice
-
-define CBUF_P		0x01	/* This cbuf contains pointers to the data,
-					not the data itself.
-				The data is resident in a user-specified (at create-time)
-					"backing store" file, which is mmap()ed.
-					*/
-
-#define CBUF_MALLOC	0x02	/* This buffer was allocated with malloc() rather than
-					mmap().
-				It may (likely) be on a "transparent hugepage" segment, 
-					courtesy of the kernel.
-				Hugepages are NOT supported for mmap()ed files.
-					*/
-
-#endif
 
 #define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.
 					This is the high bit in `chk_cnt` below.
@@ -232,45 +208,44 @@ define CBUF_P		0x01	/* This cbuf contains pointers to the data,
 	CBUF	
 */
 struct cbuf {
-	void		*buf;		/* Contiguous block of memory over which
-						the circular buffer iterates.
+	const void		*buf;		/* Contiguous block of memory over which
+							the circular buffer iterates.
 						*/
-	uint8_t		sz_bitshift_;	/* Used to quickly multiply or divide by obj_sz.
-					... or derive obj_sz by bitshifting `1`.
-					NOTE that all sizes and positions in this 
-						struct are in BYTES, not 'blocks' or 'cells'.
-					This is OK as a uint8_t: it will never be
-						more than 32.
+	const uint8_t		sz_bitshift_;	/* Used to quickly multiply or divide by obj_sz.
+						... or derive obj_sz by bitshifting `1`.
+						NOTE that all sizes and positions in this 
+							struct are in BYTES, not 'blocks' or 'cells'.
+						This is OK as a uint8_t: it will never be
+							more than 32.
 						*/
-	uint8_t		cbuf_flags;
-	uint16_t	chk_cnt;	/* how many checkpoints in progress?
-					Cannot clean up until all checkpoint
-						loops are finished.
+	uint8_t			cbuf_flags;
+	volatile uint16_t	chk_cnt;	/* how many checkpoints in progress?
+						Cannot clean up until all checkpoint
+							loops are finished.
 						*/
-	uint32_t	overflow_;	/* Used for quick masking of `pos` variables. 
-					It's also `buf_sz -1`, and is used 
-						in lieu of a dedicated `buf_sz` 
-						variable to keep struct size <=64B.
+	const uint32_t		overflow_;	/* Used for quick masking of `pos` variables. 
+						It's also `buf_sz -1`, and is used 
+							in lieu of a dedicated `buf_sz` 
+							variable to keep struct size <=64B.
 					       */
 
 	/* byte offsets into buffer - MUST be masked: use only with cbuf_offt() */
-	uint32_t	snd_pos; /* ... unsigned so they can roll over harmlessly. */
-	uint32_t	rcv_pos;
+	volatile uint32_t	snd_pos;	/* ... unsigned so they can roll over harmlessly. */
+	volatile uint32_t	rcv_pos;
 
 	/* some sizes are SIGNED: atomic subtractions may push them negative */
-	int64_t		sz_unused;	/* Can be written. */
-	int64_t		sz_ready;	/* Ready for reading. */
+	volatile int64_t	sz_unused;	/* Can be written. */
+	volatile int64_t	sz_ready;	/* Ready for reading. */
 
-	uint32_t	snd_reserved;	/* Reserved by writer(s). */
-	uint32_t	snd_uncommit;	/* Not committed because other writers I/P. */
-	uint32_t	rcv_reserved;	/* Reserved by readers(s). */
-	uint32_t	rcv_uncommit;	/* Not committed because other readers I/P. */
+	volatile uint32_t	snd_reserved;	/* Reserved by writer(s). */
+	volatile uint32_t	snd_uncommit;	/* Not committed because other writers I/P. */
+	volatile uint32_t	rcv_reserved;	/* Reserved by readers(s). */
+	volatile uint32_t	rcv_uncommit;	/* Not committed because other readers I/P. */
 
-	uint64_t	user_bits;	/* Unused by the algorithm AT THE MOMENT.
-					The risk is yours >:)
+	uint64_t		user_bits;	/* Unused by the algorithm AT THE MOMENT.
+						The risk is yours >:)
 						*/
 }__attribute__ ((packed));
-
 
 
 
@@ -314,7 +289,7 @@ uint32_t	cbuf_actual_snd(struct cbuf *cb);
 uint32_t	cbuf_actual_rcv(struct cbuf *cb);
 
 /* checkpoint */
-cbuf_chk_t	*cbuf_checkpoint_snapshot(struct cbuf *cb);
+void		cbuf_checkpoint_snapshot(struct cbuf *b, cbuf_chk_t *check);
 int		cbuf_checkpoint_verif(struct cbuf *cb, cbuf_chk_t *checkpoint);
 int		cbuf_checkpoint_loop(struct cbuf *cb);
 
@@ -334,7 +309,7 @@ This function exists to hide the masking necessary to roll over from the end to
 Z_INL_FORCE void *cbuf_offt(struct cbuf *cb, struct cbuf_blk_ref cbr)
 {
 	cbr.pos += cbr.i << cb->sz_bitshift_; /* purrformance */
-	return cb->buf + (cbr.pos & cb->overflow_);
+	return (void *)(cb->buf + (cbr.pos & cb->overflow_));
 }
 
 /* A convenient holder for pertinent reservation data,

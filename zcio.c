@@ -20,71 +20,78 @@ void			zcio_free(struct zcio_store *zs)
 {
 	if (!zs)
 		return;
-	void *temp = NULL;
+	void *temp;
 
 	/* TODO: implement this sexy thing everywhere */
-	__atomic_exchange(&zs->buf,(struct cbuf**)&temp,(struct cbuf**)&temp, __ATOMIC_SEQ_CST);
-	if (temp) {
-		Z_inf(0, "cbuf_free");
+	temp = __atomic_exchange_n(&zs->buf, NULL, __ATOMIC_SEQ_CST);
+	if (temp)
 		cbuf_free(temp);
-	}
 
-	if (zs->iov.iov_base) {
+	temp = __atomic_exchange_n(&zs->iov.iov_base, NULL, __ATOMIC_SEQ_CST);
+	if (temp) {
+		/*  if malloc(), free */
+		if (!zs->fd) {
+			free(temp);
 		/* free backing store (there is an SBFU function for the mapped case) */
-		sbfu_unmap(zs->fd, &zs->iov);
+		} else {
+			struct iovec t_iov = {	.iov_base = temp, 
+						.iov_len = zs->iov.iov_len };
+			sbfu_unmap(zs->fd, &t_iov);
+		}
 	}
 
-
-	void *zstmp = NULL;
-	__atomic_exchange(&zs, (struct zcio_store**)&zstmp, (struct zcio_store**)&zstmp, 
-				__ATOMIC_SEQ_CST);
-	if (zstmp) {
-		Z_inf(0, "zstmp free");
-		free(zstmp);
-	}
+	free(zs);
 }
 
+/*	zcio_in_splice()
+Splice from a pipe into memory backing store,
+	(so from fd_pipe_from -> zs->iov).
+Returns number of bytes spliced
+	(may be less than requested 'size'),
+	0 on error (never -1).
+*/
 size_t			zcio_in_splice(struct zcio_store *zs, 
 					struct cbuf_blk_ref dest,
 					int fd_pipe_from, size_t size)
 
 {
-	/* Splice from a pipe into memory backing store 
-		so from fd_pipe_from -> zs->fd */
-
-	if (!size)
-	{
-		Z_err("size is 0");
-		return 0;
-	}
-
-
-	// we need to create zcio_block from cbuf_offt 
+	/* cbuf block contains a zcio_block */
 	struct zcio_block *zb = cbuf_offt(zs->buf, dest);
 
+	/* is there work to do? */
+	if (!size)
+		return (zb->data_len = 0);
+	/*  unrealistic size request, do the max possible */
+	if (size > zs->block_sz)
+		size = zs->block_sz;
+
 	do {
-		if (!zs->fd) /* deal with the malloc case */
+		/* if backing store is malloc()ed, must read()*/
+		if (!zs->fd) {
 			zb->data_len = read(fd_pipe_from, 
 					zs->iov.iov_base + zb->blk_offset, 
 					size);
-		else
+		/* splice */
+		} else {
+			/* because splice() f'ing MODIFIES this */
+			loff_t temp_offt = zb->blk_offset;
 			zb->data_len = splice(fd_pipe_from, NULL,  
-					zs->fd, &zb->blk_offset, 
+					zs->fd, &temp_offt, 
 					size,  
-					SPLICE_F_MOVE | SPLICE_F_NONBLOCK);
+					ZCIO_SPLICE_FLAGS);
+		}
 	/* notice we are not looping on a partial read/splice */
 	} while (zb->data_len == -1 && errno == EWOULDBLOCK
 		/* the below are tested/executed only if we would block: */ 
 		&& !CBUF_YIELD() /* don't spinlock */
 		&& !(errno = 0)); /* resets errno ONLY if we will retry */
 
-
 	/* if got error, reset to "nothing" */	
 	if (zb->data_len == -1) {
 		Z_err("splice size=%ld", size);	
 		zb->data_len = 0;
 	}
-	
+
 	/* We could have spliced an amount LESS than requested.
 	That is not an error: caller should check the return valu
 		and act accordingly.	
@@ -96,11 +103,10 @@ size_t			zcio_in_splice(struct zcio_store *zs,
 
 
 /*	zcio_out_splice_sub()
-Reads 'data_len' from the block described by 'pos' and 'i'.
-See cbuf_blk_data_len() for details on where this is located physically.
+Reads 'data_len' from the block described by 'cbr'.
 
-splice()s 'data_len' bytes from block into 'fd_pipe_write'.
-`fd_pipe_write` MUST be a pipe, not a file or mmap'ed region.
+splice()s 'data_len' bytes from backing store into 'fd_pipe_to'.
+'fd_pipe_to' MUST be a pipe, not a file or mmap'ed region.
 
 returns nr. of bytes spliced, 0 on error.
 
@@ -113,15 +119,22 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 {
 	struct zcio_block *zb = cbuf_offt(zs->buf, cbr);
 
-	/* sanity */
+	/* length sanity */
 	if (zb->data_len == 0)
 		return 0;
-
  	if (zb->data_len > zs->block_sz) {
 		Z_err("corrupt splice size of %ld, max is %ld", 
 			zb->data_len, zs->block_sz);
 		return 0;
 	}
+
+	/* put splice parameters here.
+	Careful: unorthodox usage of "iov_base" as an OFFSET.
+	This is to avoid assembling a "struct iovec" on the stack in
+		the malloc() case below ;)
+		*/
+	struct iovec splice_vec = {	.iov_base = (void *)zb->blk_offset,
+					.iov_len = zb->data_len };
 
 	/* sub-block? */
 	if (sub_len) {
@@ -130,8 +143,8 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 				sub_len, sub_offt, zb->data_len);
 			return 0;
 		}
-		zb->data_len = sub_len;
-		zb->blk_offset += sub_offt;
+		splice_vec.iov_len = sub_len;
+		splice_vec.iov_base += sub_offt;
 	}
 
 	/* Pull chunk from buffer.
@@ -140,18 +153,18 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 		*/
 	ssize_t temp;
 	do {
-		/* if we don't have an fd, we vmsplice as its a malloc */
+		/* if we don't have an fd, we vmsplice as its a malloc() */
 		if (!zs->fd)
 		{
-			struct iovec iov;
-			iov.iov_base = zs->buf + zb->blk_offset;
-			iov.iov_len = zb->data_len;
-			temp = vmsplice(fd_pipe_to, &iov, 1, SPLICE_F_GIFT);
-		}
-		else {
-			/* we always just splice: splice() */
-			temp = splice(zs->fd, &zb->blk_offset, fd_pipe_to, 
-				NULL, zb->data_len, SPLICE_F_NONBLOCK);
+			/* turn OFFSET into POINTER */
+			splice_vec.iov_base += (uint64_t)zs->iov.iov_base;
+			temp = vmsplice(fd_pipe_to, &splice_vec, 1, ZCIO_SPLICE_FLAGS);
+
+		/* it's mmap(), so splice() */
+		} else {
+			temp = splice(zs->fd, (loff_t *)&splice_vec.iov_base, 
+					fd_pipe_to, NULL, 
+					splice_vec.iov_len, ZCIO_SPLICE_FLAGS);
 		}
 	} while ((temp == -1) && errno == EWOULDBLOCK 
 		/* the below are tested/executed only if we would block: */ 

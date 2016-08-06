@@ -6,7 +6,7 @@
 #define Z_BLK_LVL 0
 /*	debug levels:
 	1:	
-	2:	
+	2:	alloc/free
 	3:	checkpoints
 	4:
 	5:	
@@ -39,6 +39,7 @@ out:
 
 void cbuf_free(struct cbuf *buf)
 {
+	Z_inf(2, "free cbuf 0x%lx", (uint64_t)buf);
 	cbuf_free_(buf);
 }
 

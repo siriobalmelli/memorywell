@@ -272,7 +272,7 @@ int test_splice_integrity()
 	Z_die_if(check != i_size, "splice: cbuf -> pipe check=%ld, i_size=%d", 
 			check, i_size);
 	/* get a handle on cbuf memory so we can check it's contents directly */
-	uint8_t *cbuf_mem_check = zs->buf->buf + zs->block_sz;
+	uint8_t *cbuf_mem_check = (uint8_t*)(zs->buf->buf + zs->block_sz);
 	cbuf_rcv_rls(zs->buf, 1); /* don't HAVE to release, we won't use cbuf again */
 
 	/* write to destination file, verify data is clean */
@@ -296,8 +296,10 @@ int test_splice_integrity()
 out:
 
 	/* clean up zcio_store */
-	if (zs)
+	if (zs) {
 		zcio_free(zs);
+		zs = NULL;
+	}
 
 	/* unmap */
 	if (i_src_data && i_src_data != MAP_FAILED)

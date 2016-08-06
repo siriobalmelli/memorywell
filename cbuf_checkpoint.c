@@ -1,5 +1,17 @@
 #include "cbuf_int.h"
 
+#ifdef Z_BLK_LVL
+#undef Z_BLK_LVL
+#endif
+#define Z_BLK_LVL 0
+/*	debug levels:
+	1:	
+	2:	alloc/free
+	3:	checkpoints
+	4:
+	5:	
+*/
+
 extern int kill_flag;
 
 /*	cbuf_checkpoint_snapshot()
@@ -46,15 +58,11 @@ The concept is that by recording both the "actual receiver" and the
 
 RETURNS: a pointer which can be fed to subsequent `verif()` calls.
 	*/
-cbuf_chk_t	*cbuf_checkpoint_snapshot(struct cbuf *b)
+void		cbuf_checkpoint_snapshot(struct cbuf *b, cbuf_chk_t *check)
 {
-	/* obviates memory leak from function exiting for some other reason
-		before it is done looping on `checkpoint_verif()`.
-		*/
-	static __thread cbuf_chk_t ret = {
-		.diff = 0,
-		.actual_rcv = 0	
-	};
+	/* zero values */
+	check->diff = 0;
+	check->actual_rcv = 0;
 
 	/* Don't start checkpointing if we are closing,
 	Atomically mark checkpoint so cleanup will wait 
@@ -64,16 +72,16 @@ cbuf_chk_t	*cbuf_checkpoint_snapshot(struct cbuf *b)
 	do {
 		cnt = b->chk_cnt;
 		if (cnt & CBUF_CHK_CLOSING)
-			return NULL;
+			return;
 		cnt_new = cnt + 1;
 	} while(!__atomic_compare_exchange(&b->chk_cnt, &cnt, &cnt_new,
 			0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
 
 	// use `diff` as a scratchpad to store "actual sender"
-	cbuf_actuals__(b, (uint32_t *)&ret.diff, (uint32_t*)&ret.actual_rcv);
-	ret.diff = ret.diff - ret.actual_rcv;
+	cbuf_actuals__(b, (uint32_t *)&check->diff, (uint32_t*)&check->actual_rcv);
+	check->diff = check->diff - check->actual_rcv;
 
-	return &ret;
+	return;
 }
 
 /*	cbuf_checkpoint_verif()
@@ -106,10 +114,12 @@ Returns: number of loop iterations waited.
 	*/
 int		cbuf_checkpoint_loop(struct cbuf *buf)
 {
-	int i = 0; /* how many times do we loop? */
-	cbuf_chk_t *check = cbuf_checkpoint_snapshot(buf);
+	/* get snapshot */
+	cbuf_chk_t check;
+	cbuf_checkpoint_snapshot(buf, &check);
 	
-	while (!cbuf_checkpoint_verif(buf, check)) {
+	int i = 0; /* how many times did we loop? */
+	while (!cbuf_checkpoint_verif(buf, &check)) {
 		i++;
 		
 		/* handle case where buffer is closing */
@@ -125,5 +135,10 @@ int		cbuf_checkpoint_loop(struct cbuf *buf)
 
 	/* log checkpoint done before exiting */
 	__atomic_sub_fetch(&buf->chk_cnt, 1, __ATOMIC_SEQ_CST);
+
+	Z_inf(3, "%d iter on cbuf checkpoint", i);
 	return i;
 }
+
+#undef Z_BLK_LVL
+#define Z_BLK_LVL 0
