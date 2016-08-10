@@ -67,23 +67,23 @@ void *splice_tx(void *args)
 			break;
 		while (sz_outstanding) {
 			step_sz = sz_outstanding /zs->block_sz  + 1;
-			pos = cbuf_snd_res_cap(zs->buf, &step_sz);
+			pos = cbuf_snd_res_cap(zs->cb, &step_sz);
 			if (pos == -1) {
 				pthread_yield();
 				continue;
 			}
 			for (i = 0; i < step_sz; i++) {
-				//temp = cbuf_splice_from_pipe(fittings[0], zs->buf, pos, i, sz_outstanding);
+				//temp = cbuf_splice_from_pipe(fittings[0], zs->cb, pos, i, sz_outstanding);
 				temp = zcio_in_splice(zs,(struct cbuf_blk_ref) 
 						{ .pos = pos, .i = i}, 
 						fittings[0], sz_outstanding);
 				sz_outstanding -= temp;
 				sz_pushed += temp;
 			}
-			cbuf_snd_rls(zs->buf, step_sz);
+			cbuf_snd_rls(zs->cb, step_sz);
 		}
 	}
-	i = cbuf_checkpoint_loop(zs->buf);
+	i = cbuf_checkpoint_loop(zs->cb);
 	Z_inf(1, "%d iter on cbuf_checkpoint_verif", i);
 
 out:
@@ -117,13 +117,13 @@ void *splice_rx(void *args)
 	while (sz_sent < sz_src && !kill_flag) {
 		/* get buffer chunks, dump them all into local pipe */
 		step_sz = (sz_src - sz_sent) / zs->block_sz + 1;
-		pos = cbuf_rcv_res_cap(zs->buf, &step_sz);
+		pos = cbuf_rcv_res_cap(zs->cb, &step_sz);
 		if (pos == -1) {
 			pthread_yield();
 			continue;
 		}
 		for (i=0; i < step_sz; i++) {
-			//temp = cbuf_splice_to_pipe(zs->buf, pos, i, fittings[1]);
+			//temp = cbuf_splice_to_pipe(zs->cb, pos, i, fittings[1]);
 			temp = zcio_out_splice(zs, (struct cbuf_blk_ref) 
 					{.pos = pos, .i = i}, fittings[1]);
 			/* Immediately splice - otherwise fittings may be full
@@ -134,7 +134,7 @@ void *splice_rx(void *args)
 				dst_fd, (loff_t *)&sz_sent, temp, 0);
 			Z_die_if(temp == -1, "write to dest file");
 		}
-		cbuf_rcv_rls(zs->buf, step_sz);
+		cbuf_rcv_rls(zs->cb, step_sz);
 	}
 
 out:
@@ -255,25 +255,25 @@ int test_splice_integrity()
 	Z_die_if(check != i_size, "splice: src -> pipe");
 
 	/* pipe -> cbuf */
-	pos = cbuf_snd_res(zs->buf, 1);
+	pos = cbuf_snd_res(zs->cb, 1);
 	Z_die_if(pos == -1, "snd reserve");
-	//check = cbuf_splice_from_pipe(plumbing[0], zs->buf, pos, 0, i_size);
+	//check = cbuf_splice_from_pipe(plumbing[0], zs->cb, pos, 0, i_size);
 	check = zcio_in_splice(zs, (struct cbuf_blk_ref) { .pos = pos, .i = 0},
 			plumbing[0], i_size);
 	Z_die_if(check != i_size, "splice: pipe -> cbuf");
-	cbuf_snd_rls(zs->buf, 1);
+	cbuf_snd_rls(zs->cb, 1);
 
 	/* cbuf -> pipe */
-	pos = cbuf_rcv_res(zs->buf, 1);
+	pos = cbuf_rcv_res(zs->cb, 1);
 	Z_die_if(pos == -1, "rcv reserve");
-	//check = cbuf_splice_to_pipe(zs->buf, pos, 0, plumbing[1]);
+	//check = cbuf_splice_to_pipe(zs->cb, pos, 0, plumbing[1]);
 	check = zcio_out_splice(zs, (struct cbuf_blk_ref) {.pos = pos, .i = 0},
 		       plumbing[1]);	
 	Z_die_if(check != i_size, "splice: cbuf -> pipe check=%ld, i_size=%d", 
 			check, i_size);
 	/* get a handle on cbuf memory so we can check it's contents directly */
-	uint8_t *cbuf_mem_check = (uint8_t*)(zs->buf->buf + zs->block_sz);
-	cbuf_rcv_rls(zs->buf, 1); /* don't HAVE to release, we won't use cbuf again */
+	uint8_t *cbuf_mem_check = (uint8_t*)(zs->cb->buf + zs->block_sz);
+	cbuf_rcv_rls(zs->cb, 1); /* don't HAVE to release, we won't use cbuf again */
 
 	/* write to destination file, verify data is clean */
 	splice(plumbing[0], NULL, i_dst_fd, NULL, i_size, 0);

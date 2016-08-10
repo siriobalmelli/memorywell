@@ -23,7 +23,7 @@ void			zcio_free(struct zcio_store *zs)
 	void *temp;
 
 	/* TODO: implement this sexy thing everywhere */
-	temp = __atomic_exchange_n(&zs->buf, NULL, __ATOMIC_SEQ_CST);
+	temp = __atomic_exchange_n(&zs->cb, NULL, __ATOMIC_SEQ_CST);
 	if (temp)
 		cbuf_free(temp);
 
@@ -56,7 +56,7 @@ size_t			zcio_in_splice(struct zcio_store *zs,
 
 {
 	/* cbuf block contains a zcio_block */
-	struct zcio_block *zb = cbuf_offt(zs->buf, dest);
+	struct zcio_block *zb = cbuf_offt(zs->cb, dest);
 
 	/* is there work to do? */
 	if (!size)
@@ -117,7 +117,7 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 					int fd_pipe_to,
 					loff_t sub_offt, size_t sub_len)
 {
-	struct zcio_block *zb = cbuf_offt(zs->buf, cbr);
+	struct zcio_block *zb = cbuf_offt(zs->cb, cbr);
 
 	/* length sanity */
 	if (zb->data_len == 0)
@@ -214,14 +214,14 @@ struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,
 	Z_die_if(!zs, "zcio_store create failed");
 
 	/* create cbuf, passing 0x0 as flag, cause malloc only */
-	zs->buf = cbuf_create_(sizeof(struct zcio_block), block_cnt, 0x0);
-	Z_die_if(!zs->buf, "cbuf create failed");
+	zs->cb = cbuf_create_(sizeof(struct zcio_block), block_cnt, 0x0);
+	Z_die_if(!zs->cb, "cbuf create failed");
 	/* cbuf_create_() will have padded the obj size and obj count to 
 		fit into powers of 2.
 	The backing store MUST have sufficient space for EACH cbufp_t in cbuf 
 		to point to a unique area of `obj_sz` length.
 		*/
-	block_cnt = cbuf_blk_cnt(zs->buf);		
+	block_cnt = cbuf_blk_cnt(zs->cb);		
 
 	/* Map backing store.
 		Typecasts because of insidious overflow.
@@ -246,13 +246,13 @@ struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,
 
 	/* populate tracking structures 
 	Go through the motions of reserving cbuf blocks rather than
-		accessing ret->buf directly.
+		accessing ret->cb directly.
 	This is because cbuf will likely fudge the block size on creation, 
 		and we don't want to care about that.
 	
 	*/
 	struct	cbuf_blk_ref cbr;
-	cbr.pos = cbuf_snd_res(zs->buf,block_cnt);
+	cbr.pos = cbuf_snd_res(zs->cb,block_cnt);
 	Z_die_if(cbr.pos == -1, "");
 	struct zcio_block *blk;
 	loff_t	offt = 0;
@@ -260,15 +260,15 @@ struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,
 	for (cbr.i = 0; cbr.i < block_cnt; 
 		cbr.i++, offt += zs->block_sz) 
 	{ 	
-		blk = cbuf_offt(zs->buf, cbr);
+		blk = cbuf_offt(zs->cb, cbr);
 		blk->blk_offset = offt;
 		blk->data_len = 0;
 	};
-	cbuf_snd_rls(zs->buf, block_cnt);
+	cbuf_snd_rls(zs->cb, block_cnt);
 	/* 'receive' so all blocks are marked as unused */
-	cbr.pos = cbuf_rcv_res(zs->buf, block_cnt);
+	cbr.pos = cbuf_rcv_res(zs->cb, block_cnt);
 	Z_die_if(cbr.pos == -1, "");
-	cbuf_rcv_rls(zs->buf, block_cnt);
+	cbuf_rcv_rls(zs->cb, block_cnt);
 
 	return zs;
 out:
