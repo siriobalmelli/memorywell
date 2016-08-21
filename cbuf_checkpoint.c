@@ -55,8 +55,6 @@ The concept is that by recording both the "actual receiver" and the
 	we create a snapshot that can be compared against a later value of
 	"actual receiver" to see if it has advanced AT LEAST as far as the
 	`diff` value in the snapshot.
-
-RETURNS: a pointer which can be fed to subsequent `verif()` calls.
 	*/
 void		cbuf_checkpoint_snapshot(struct cbuf *b, cbuf_chk_t *check)
 {
@@ -70,12 +68,12 @@ void		cbuf_checkpoint_snapshot(struct cbuf *b, cbuf_chk_t *check)
 		*/
 	uint16_t cnt, cnt_new;
 	do {
-		cnt = b->chk_cnt;
+		cnt = __atomic_load_n(&b->chk_cnt, __ATOMIC_RELAXED);
 		if (cnt & CBUF_CHK_CLOSING)
 			return;
 		cnt_new = cnt + 1;
 	} while(!__atomic_compare_exchange(&b->chk_cnt, &cnt, &cnt_new,
-			0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST));
+			0, __ATOMIC_RELAXED, __ATOMIC_RELAXED));
 
 	// use `diff` as a scratchpad to store "actual sender"
 	cbuf_actuals__(b, (uint32_t *)&check->diff, (uint32_t*)&check->actual_rcv);
@@ -96,14 +94,15 @@ int		cbuf_checkpoint_verif(struct cbuf *buf, cbuf_chk_t *checkpoint)
 	uint32_t actual_rcv = 0;
 	cbuf_actuals__(buf, NULL, &actual_rcv);
 
-	return ((int64_t)actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff
-	/* This second test in case we slept too long and buffer
-		lapped all the way around: but then data stopped being
-		sent and we would otherwise wait eternally .. on an empty buffer.
+	return 
+		/* first case: we know more data has been consumed than was "diff"
+			at time of original checkpoint.
 		*/
-		|| (	__atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST) 
-			== __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)
-		);
+		( ((int64_t)actual_rcv - checkpoint->actual_rcv) >= checkpoint->diff )
+		/* second case: we slept too long and buffer lapped all the way around.
+		But then data stopped being sent and we would otherwise wait eternally .. on an empty buffer.
+			*/
+		|| (buf->snd_pos == buf->rcv_pos);
 }
 
 /*	cbuf_checkpoint_loop()
@@ -134,7 +133,7 @@ int		cbuf_checkpoint_loop(struct cbuf *buf)
 	}
 
 	/* log checkpoint done before exiting */
-	__atomic_sub_fetch(&buf->chk_cnt, 1, __ATOMIC_SEQ_CST);
+	__atomic_sub_fetch(&buf->chk_cnt, 1, __ATOMIC_RELAXED);
 
 	Z_inf(3, "%d iter on cbuf checkpoint", i);
 	return i;

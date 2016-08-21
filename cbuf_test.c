@@ -286,8 +286,8 @@ retry:
 				s = cbuf_offt(b,(struct cbuf_blk_ref) {.pos = pos, .i = j});
 				/* add to global sum; will be used to test data integrity */
 				__atomic_add_fetch(&rx_i_sum, 
-					__atomic_load_n(&s->i, __ATOMIC_SEQ_CST),
-					__ATOMIC_SEQ_CST);
+					__atomic_load_n(&s->i, __ATOMIC_RELAXED),
+					__ATOMIC_RELAXED);
 				//Z_inf(0, "s @%08lx i = %d", (uint64_t)s, s->i);
 			}
 			cbuf_rcv_rls(b, step_sz);
@@ -331,11 +331,11 @@ retry:
 			for (j=0; j < step_sz; j++) {
 				s = cbuf_offt(b, (struct cbuf_blk_ref) { .pos = pos, .i = j});
 				/* this will be used for 'data integrity' check */
-				__atomic_store_n(&s->i, i+j, __ATOMIC_SEQ_CST);
+				__atomic_store_n(&s->i, i+j, __ATOMIC_RELAXED);
 				/* ... and it will be checked against this: */
 				__atomic_add_fetch(&tx_i_sum, 
-					__atomic_load_n(&s->i, __ATOMIC_SEQ_CST),
-					__ATOMIC_SEQ_CST);
+					__atomic_load_n(&s->i, __ATOMIC_RELAXED),
+					__ATOMIC_RELAXED);
 			}
 			cbuf_snd_rls(b, step_sz);
 		}

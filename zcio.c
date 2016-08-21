@@ -23,11 +23,11 @@ void			zcio_free(struct zcio_store *zs)
 	void *temp;
 
 	/* TODO: implement this sexy thing everywhere */
-	temp = __atomic_exchange_n(&zs->cb, NULL, __ATOMIC_SEQ_CST);
+	temp = __atomic_exchange_n(&zs->cb, NULL, __ATOMIC_RELAXED);
 	if (temp)
 		cbuf_free(temp);
 
-	temp = __atomic_exchange_n(&zs->iov.iov_base, NULL, __ATOMIC_SEQ_CST);
+	temp = __atomic_exchange_n(&zs->iov.iov_base, NULL, __ATOMIC_RELAXED);
 	if (temp) {
 		/*  if malloc(), free */
 		if (!zs->fd) {

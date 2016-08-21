@@ -115,18 +115,18 @@ void cbuf_free_(struct cbuf *buf)
 	);
 
 	/* mark buffer closing, wait for any pending checkpoints */
-	uint16_t cnt = __atomic_or_fetch(&buf->chk_cnt, CBUF_CHK_CLOSING, __ATOMIC_SEQ_CST);
+	uint16_t cnt = __atomic_or_fetch(&buf->chk_cnt, CBUF_CHK_CLOSING, __ATOMIC_RELAXED);
 	while (cnt != CBUF_CHK_CLOSING) { /* this is 0 ongoing checkpoint loops, plus the flag we set */
 		CBUF_YIELD();
-		cnt = __atomic_load_n(&buf->chk_cnt, __ATOMIC_SEQ_CST);
+		cnt = __atomic_load_n(&buf->chk_cnt, __ATOMIC_RELAXED);
 	}
 
 	/* if allocated, free buffer */
 	void *temp;
-	temp = (void *)__atomic_exchange_n(&buf->buf, NULL, __ATOMIC_SEQ_CST);
+	temp = (void *)__atomic_exchange_n(&buf->buf, NULL, __ATOMIC_RELAXED);
 	if (temp)
 		free(temp);
-	
+
 	Z_inf(3, "cbuf @0x%lx", (uint64_t)buf);
 	free(buf);
 }
@@ -142,13 +142,13 @@ uint32_t cbuf_reserve__(struct cbuf		*buf,
 			volatile uint32_t	*pos)
 {
 	/* Are there sufficient unused 'source' slots? */ 
-	if (__atomic_sub_fetch(sz_source, blk_sz, __ATOMIC_SEQ_CST) < 0) { 
+	if (__atomic_sub_fetch(sz_source, blk_sz, __ATOMIC_RELAXED) < 0) { 
 		/* no? Put back the ones we took and bail */
-		__atomic_add_fetch(sz_source, blk_sz, __ATOMIC_SEQ_CST);
+		__atomic_add_fetch(sz_source, blk_sz, __ATOMIC_RELAXED);
 		return -1;
 	} else {
 		/* mark this many bytes as 'reserved' (aka: 'being written) */
-		__atomic_add_fetch(reserved, blk_sz, __ATOMIC_SEQ_CST);
+		__atomic_add_fetch(reserved, blk_sz, __ATOMIC_RELAXED);
 	}
 
 	/* get pos BEFORE increment, 
@@ -157,7 +157,7 @@ uint32_t cbuf_reserve__(struct cbuf		*buf,
 	   ... we MUST mask here, because otherwise we could legitimately
 		return -1.
 	   */
-	return __atomic_fetch_add(pos, blk_sz, __ATOMIC_SEQ_CST) & buf->overflow_;
+	return __atomic_fetch_add(pos, blk_sz, __ATOMIC_RELAXED) & buf->overflow_;
 }
 
 void cbuf_release__(struct cbuf			*buf,
@@ -169,16 +169,16 @@ void cbuf_release__(struct cbuf			*buf,
 	if (*reserved < blk_sz) /* quit playing games with my heart, my heart... */
 		return;
 	/* Are there more bytes reserved than just the ones we are releasing? */
-	if (__atomic_sub_fetch(reserved, blk_sz, __ATOMIC_SEQ_CST) > 0) {
+	if (__atomic_sub_fetch(reserved, blk_sz, __ATOMIC_RELAXED) > 0) {
 		/* yes? Add ours to 'uncommitted' rather than releasing. */
-		__atomic_add_fetch(uncommit, blk_sz, __ATOMIC_SEQ_CST); 
+		__atomic_add_fetch(uncommit, blk_sz, __ATOMIC_RELAXED); 
 	} else {
 		/* add any uncommitted size to size of commit */
-		blk_sz += __atomic_exchange_n(uncommit, 0, __ATOMIC_SEQ_CST);
+		blk_sz += __atomic_exchange_n(uncommit, 0, __ATOMIC_RELAXED);
 		/* commit bytes as ready for destination queue 
 		   e.g.: unused -> ready | ready -> unused
 		   */
-		__atomic_add_fetch(sz_dest, blk_sz, __ATOMIC_SEQ_CST);
+		__atomic_add_fetch(sz_dest, blk_sz, __ATOMIC_RELAXED);
 	}
 }
 
@@ -206,12 +206,12 @@ void cbuf_release_scary__(struct cbuf		*buf,
 		return;
 	}
 	/* remove from reserved */
-	__atomic_sub_fetch(reserved, blk_sz, __ATOMIC_SEQ_CST);
+	__atomic_sub_fetch(reserved, blk_sz, __ATOMIC_RELAXED);
 
 	/* commit bytes as ready for destination queue 
 	   e.g.: unused -> ready, ready -> unused
 	   */
-	__atomic_add_fetch(sz_dest, blk_sz, __ATOMIC_SEQ_CST);
+	__atomic_add_fetch(sz_dest, blk_sz, __ATOMIC_RELAXED);
 }
 
 /*	cbuf_actuals__()
@@ -233,7 +233,7 @@ Both `act_snd` and `act_rcv` can only increase.
 	This means: get `act_snd` FIRST.
 Both `act_snd` and `act_rcv` are made up of a "pos" and a counter:
 	`act_snd == rcv_pos + sz_ready`
-	`act_rcv == snd_pos + sz_unused`
+	`act_rcv == sz_unused + snd_pos`
 	Of these two, the `pos` can only increase, whereas the counter may
 		increase or decrease.
 	This means that for `act_snd` (which we want the LOWEST possible value for)
@@ -245,24 +245,30 @@ Both values are masked so as to give actual position values.
 	*/
 void	cbuf_actuals__(struct cbuf *buf, uint32_t *act_snd, uint32_t *act_rcv)
 {
-	/*  Use register as a gimmick to FORCE the order
-		in which variables are loaded.
-		*/
-	register uint32_t reg;
+	/* TODO: write lock elision code for this */
+	uint32_t act_s, act_r;
 
-	if (act_snd) {
-		reg = __atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST);
-		__atomic_store_n(act_snd, 
-			(reg + __atomic_load_n(&buf->sz_ready, __ATOMIC_SEQ_CST)) & buf->overflow_,
-			__ATOMIC_SEQ_CST);
-	}
+	/* top-level atomic stores forcing sequence:
+		get sender before receiver.
+	*/
+	__atomic_store_n(&act_s, 
+		(	__atomic_load_n(&buf->rcv_pos, __ATOMIC_SEQ_CST) 
+			+ __atomic_load_n(&buf->sz_ready, __ATOMIC_SEQ_CST)
+		)
+		& buf->overflow_,
+		__ATOMIC_SEQ_CST);
 
-	if (act_rcv) {
-		reg = __atomic_load_n(&buf->sz_unused, __ATOMIC_SEQ_CST);
-		__atomic_store_n(act_rcv, 
-			(reg + __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)) & buf->overflow_,
-			__ATOMIC_SEQ_CST);
-	}
+	__atomic_store_n(&act_r, 
+		(	__atomic_load_n(&buf->sz_unused, __ATOMIC_SEQ_CST) 
+			+ __atomic_load_n(&buf->snd_pos, __ATOMIC_SEQ_CST)
+		)
+		& buf->overflow_,
+		__ATOMIC_SEQ_CST);
+
+	if (act_snd)
+		*act_snd = act_s;
+	if (act_rcv)
+		*act_rcv = act_r;
 }
 
 /*	cbuf_flags_prn_()
