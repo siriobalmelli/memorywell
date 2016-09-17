@@ -32,7 +32,7 @@ int cbuf_zero(struct cbuf *buf)
 	Z_die_if(!buf, "no buffer");
 	Z_bail_if((buf->snd_pos + buf->rcv_pos) & buf->overflow_, "buffer occupied");
 
-	memset(buf->buf, 0x0, cbuf_sz_buf(buf));
+	memset((void*)buf->buf, 0x0, cbuf_sz_buf(buf));
 out:
 	return err_cnt;
 }
