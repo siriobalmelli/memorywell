@@ -16,9 +16,9 @@ CBUF_=1
 	# auto-generator inputs, for dependency only
 	JSONZ += $(TUP_CWD)/*.json
 
-	include ../sbfu/sbfu.tup
 	include ../bits/bits.tup
-	include ../mtsig/mtsig.tup
 	include ../judyutil/judyutil.tup
+	include ../mtsig/mtsig.tup
+	include ../sbfu/sbfu.tup
 
 endif
