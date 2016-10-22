@@ -174,7 +174,7 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 	/* haz error? */
 	if (temp == -1) {
 		temp = 0;
-		Z_err("data_len=%lu", zb->data_len);
+		Z_err("data_len=%lu;	zs->fd=%d", zb->data_len, zs->fd);
 	}
 
 	return temp;
