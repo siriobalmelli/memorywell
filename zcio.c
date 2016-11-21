@@ -182,30 +182,24 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 }
 
 /*	zcio_new()
-Creates a temporary "backing store" mmap()ed to the file path
-	requested by 'backing_store'.
-Any existing file at that path will be overwritten.
+Creates a temporary "backing store" either as a mmap()ed file or as a malloc()ed region.
+If MMAP, backing store will be a random temp file in 'map_dir'.
+If 'map_dir' is NULL, then temp file will be in "/tmp".
 
 Then creates a cbuf which blocks are 'sizeof(cbufp_t)' large,
 	each 'cbuf' describes a 'block' of memory mapped IN THE BACKING STORE.
 
-Essentially, each cbuf block is only used as a tracking structure describing
+Each cbuf block is only used as a tracking structure describing
 	a block in the backing store.
-See description of 'cbufp' in "cbuf.h".
 
-Note that the reason 'backing_store' is user-provided is to allow the user to
+Note that the reason 'map_dir' is user-provided is to allow the user to
 	force backing store creation on a disk of their own choosing.
 This reduces the cost of splice() operation between the backing store
 	and a destination file on that same file system (essentially,
 	only some filesystem accounting needs to be done).
 
- ODO: Robert, the current 'backing_store' logic is probably wrong:
-	we want to allow the user to specify which DIRECTORY PATH
-	the backing store should be created in, not necessarily what
-	its precise filename should be (I can't think of a case, can you?).
-Look at 'char tfile[]' in "cbuf_int.c" and `man mkostemp`
-	for workable temp file creation mechanism.
-	*/
+returns a valid zcio_store, or NULL on failure.
+*/
 struct zcio_store	*zcio_new(size_t block_sz, uint32_t block_cnt,
 		enum zcio_store_type zctype, const char *map_dir)
 {
