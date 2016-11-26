@@ -14,6 +14,7 @@
 */
 
 /** INTERNALS **/
+// TODO: add HLE flags to cbuf operations to try and get a speed bump; measure this
 
 /*	next_pow2()
 Returns next higher power of 2, or itself if already power of 2.
