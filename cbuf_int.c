@@ -1,4 +1,5 @@
 #include "cbuf_int.h"
+#include "bits.h"
 
 #include <stdlib.h>
 
@@ -15,34 +16,6 @@
 
 /** INTERNALS **/
 // TODO: add HLE flags to cbuf operations to try and get a speed bump; measure this
-
-/*	next_pow2()
-Returns next higher power of 2, or itself if already power of 2.
-Shamelessly ripped off of an S/O thread.
-	*/
-uint32_t next_pow2(uint32_t x)
-{
-	Z_die_if(!x, "no number to power");
-	x--;
-	x |= x >> 1;
-	x |= x >> 2;
-	x |= x >> 4;
-	x |= x >> 8;
-	x |= x >> 16;
-
-	return x+1;
-out:
-	return 0;
-}
-
-/*	next_multiple()
-Returns `x` if `x` divides evenly into `mult`
-Else returns next multiple of mult above x
-	*/
-uint32_t next_multiple(uint32_t x, uint32_t mult)
-{
-	return ((x + (mult -1)) / mult) * mult;
-}
 
 struct cbuf *cbuf_create_(uint32_t	obj_sz,
 			uint32_t	obj_cnt,
@@ -77,7 +50,7 @@ struct cbuf *cbuf_create_(uint32_t	obj_sz,
 
 	/* 'buf_sz' must be a multiple of obj_sz AND a power of 2 */
 	uint32_t buf_sz = obj_sz * obj_cnt;
-	sz_aligned = next_pow2(next_multiple(buf_sz, obj_sz));
+	sz_aligned = next_pow2(next_mult32(buf_sz, obj_sz));
 	Z_bail_if(sz_aligned < buf_sz,
 		"aligned buf_sz overflow: buf_sz=%d > sz_aligned=%d",
 		buf_sz, sz_aligned);
