@@ -16,5 +16,5 @@ EXE_LOCAL = cbuf_splice_test.c cbuf_test.c
 : foreach $(EXE_LOCAL) |> !cc |> {exes}
 : foreach {exes} |> !exe |>
 
-# preserve the Makefile
+# testing structure
 : run_tests.sh |> !tup_preserve |>
