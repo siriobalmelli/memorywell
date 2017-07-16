@@ -111,10 +111,15 @@ Returns new 'pos' (aka: offset)
 	*/
 uint32_t cbuf_reserve__(struct cbuf		*buf,
 			size_t			blk_sz,
+			/* TODO: these are NOT volatile: make them ATOMIC only - C11 FTW! */
 			volatile int64_t	*sz_source,
 			volatile uint32_t	*reserved,
 			volatile uint32_t	*pos)
 {
+	/* TODO: do a fast-path check with a relaxed atomic by enclosing
+		this whole thing in an 'if' block?
+	*/
+
 	/* Are there sufficient unused 'source' slots? */
 	if (__atomic_sub_fetch(sz_source, blk_sz, __ATOMIC_RELAXED) < 0) {
 		/* no? Put back the ones we took and bail */
