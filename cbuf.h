@@ -258,8 +258,11 @@ typedef struct {
 } cbuf_chk_t;
 
 
-/* TODO: replace function signatures in object file(s) */
-/* TODO: change all references to "obj" to be "blk" */
+/* TODO:
+-	replace function signatures in object file(s)
+-	change all references to "obj" to be "blk"
+-	lock-free validation (testing?) : <http://plrg.eecs.uci.edu/software_page/42-2/>
+*/
 
 /* compute some basic values out of a cbuf struct */
 Z_INL_FORCE uint32_t cbuf_sz_buf(struct cbuf *cb) { return cb->overflow_ + 1; }
