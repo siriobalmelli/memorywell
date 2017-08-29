@@ -17,7 +17,6 @@ NOTE: caller must interface with cbuf 'cb' DIRECTLY - no cbuf
 #include <fcntl.h> /* splice() */
 #include <sys/uio.h>
 
-#include "sbfu.h" /* mmap()-related schizzle */
 #include "cbuf.h"
 
 #define ZCIO_SPLICE_FLAGS ( SPLICE_F_NONBLOCK | SPLICE_F_GIFT | SPLICE_F_MOVE )

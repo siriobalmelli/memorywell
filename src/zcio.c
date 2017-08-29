@@ -88,12 +88,12 @@ size_t			zcio_in_splice(struct zcio_store *zs,
 
 	/* if got error, reset to "nothing" */
 	if (zb->data_len == -1) {
-		Z_err("splice size=%ld", size);
+		Z_log_err("splice size=%ld", size);
 		zb->data_len = 0;
 	}
 
 	/* We could have spliced an amount LESS than requested.
-	That is not an error: caller should check the return valu
+	That is not an error: caller should check the return value
 		and act accordingly.
 		*/
 	Z_err_if(zb->data_len == 0, "zb->data_len %ld; size %ld", zb->data_len, size);
@@ -123,7 +123,7 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 	if (zb->data_len == 0)
 		return 0;
  	if (zb->data_len > zs->block_sz) {
-		Z_err("corrupt splice size of %ld, max is %ld",
+		Z_log_err("corrupt splice size of %ld, max is %ld",
 			zb->data_len, zs->block_sz);
 		return 0;
 	}
@@ -139,7 +139,7 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 	/* sub-block? */
 	if (sub_len) {
 		if (sub_len > (int64_t)zb->data_len - sub_offt) {
-			Z_err("bad sub-block request: len %ld @offt %ld > *data_len %ld",
+			Z_log_err("bad sub-block request: len %ld @offt %ld > *data_len %ld",
 				sub_len, sub_offt, zb->data_len);
 			return 0;
 		}
@@ -174,7 +174,7 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 	/* haz error? */
 	if (temp == -1) {
 		temp = 0;
-		Z_err("data_len=%lu;	zs->fd=%d", zb->data_len, zs->fd);
+		Z_log_err("data_len=%lu;	zs->fd=%d", zb->data_len, zs->fd);
 	}
 
 	return temp;
@@ -269,5 +269,3 @@ out:
 	zcio_free(zs);
 	return NULL;
 }
-
-

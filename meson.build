@@ -37,7 +37,7 @@ endif
 # deps
 nonlibc = dependency('nonlibc', fallback : ['nonlibc', 'nonlibc_dep']) 
 # All deps in a single arg. Use THIS ONE in compile calls
-deps = [ nonlibc, m, crypto ]
+deps = [ nonlibc ]
 
 
 #build

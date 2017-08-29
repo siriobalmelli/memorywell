@@ -271,7 +271,6 @@ Z_INL_FORCE uint32_t cbuf_blk_cnt(struct cbuf *cb) { return cbuf_sz_buf(cb) >> c
 
 /* create/free */
 struct cbuf *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
-int	cbuf_zero(struct cbuf *cb);
 void	cbuf_free(struct cbuf *cb);
 
 /* reserve */

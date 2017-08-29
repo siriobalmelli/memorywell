@@ -1,45 +1,13 @@
 #include "cbuf_int.h"
 
-#ifdef Z_BLK_LVL
-#undef Z_BLK_LVL
-#endif
-#define Z_BLK_LVL 0
-/*	debug levels:
-	1:
-	2:	alloc/free
-	3:	checkpoints
-	4:
-	5:
-*/
-
 struct cbuf *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt)
 {
 	return cbuf_create_ (obj_sz, obj_cnt, 0x0);
 }
 
-/*	cbuf_zero()
-Zero the entire buffer.
-Has the side effect of pre-faulting a buffer.
-
-returns 0 on success.
-
-Zeroing a buffer that has reserved blocks is considered bad form
-	and will produce an error.
-*/
-int cbuf_zero(struct cbuf *buf)
-{
-	int err_cnt = 0;
-	Z_die_if(!buf, "no buffer");
-	Z_bail_if((buf->snd_pos + buf->rcv_pos) & buf->overflow_, "buffer occupied");
-
-	memset((void*)buf->buf, 0x0, cbuf_sz_buf(buf));
-out:
-	return err_cnt;
-}
-
 void cbuf_free(struct cbuf *buf)
 {
-	Z_inf(2, "free cbuf 0x%lx", (uint64_t)buf);
+	Z_log(Z_in2, "free cbuf 0x%lx", (uint64_t)buf);
 	cbuf_free_(buf);
 }
 
@@ -194,6 +162,3 @@ uint32_t	cbuf_actual_rcv(struct cbuf *buf)
 	cbuf_actuals__(buf, NULL, &ret);
 	return ret;
 }
-
-#undef Z_BLK_LVL
-#define Z_BLK_LVL 0

@@ -40,7 +40,7 @@ int main()
 {
 	int err_cnt = 0;
 	clock_t start;
-	Z_inf(0, "obj_sz >= %lu, obj_cnt = %lu, %ld iter",
+	Z_log(Z_inf, "obj_sz >= %lu, obj_cnt = %lu, %ld iter",
 		OBJ_SZ, OBJ_CNT, (long)NUMITER * THREAD_CNT);
 
 	/* Test that a cbuf does in fact go all the way to UINT32_MAX size.
@@ -55,40 +55,40 @@ int main()
 	cbuf_free(random);
 
 	start = clock();
-	Z_inf(0, "single thread, single step");
+	Z_log(Z_inf, "single thread, single step");
 	err_cnt += test_cbuf_single(0);
 	start = clock() - start;
-	Z_inf(0, "ELAPSED: %ld", start);
+	Z_log(Z_inf, "ELAPSED: %ld", start);
 
   	start = clock();
-	Z_inf(0, "single thread, single step (malloc'ed)");
+	Z_log(Z_inf, "single thread, single step (malloc'ed)");
 	err_cnt += test_cbuf_single(1);
 	start = clock() - start;
-	Z_inf(0, "ELAPSED: %ld", start);
+	Z_log(Z_inf, "ELAPSED: %ld", start);
 
 	start = clock();
-	Z_inf(0, "single thread, stepped: %d", STEP_SIZE);
+	Z_log(Z_inf, "single thread, stepped: %d", STEP_SIZE);
 	err_cnt += test_cbuf_steps(0);
 	start = clock() - start;
-	Z_inf(0, "ELAPSED: %ld", start);
+	Z_log(Z_inf, "ELAPSED: %ld", start);
 
     	start = clock();
-	Z_inf(0, "single thread, stepped (malloc'ed): %d", STEP_SIZE);
+	Z_log(Z_inf, "single thread, stepped (malloc'ed): %d", STEP_SIZE);
 	err_cnt += test_cbuf_steps(1);
 	start = clock() - start;
-	Z_inf(0, "ELAPSED: %ld", start);
+	Z_log(Z_inf, "ELAPSED: %ld", start);
 
   	start = clock();
-	Z_inf(0, "%d threads, stepped: %d", THREAD_CNT, STEP_SIZE);
+	Z_log(Z_inf, "%d threads, stepped: %d", THREAD_CNT, STEP_SIZE);
 	err_cnt += test_cbuf_threaded(0);
 	start = clock() - start;
-	Z_inf(0, "ELAPSED: %ld", start);
+	Z_log(Z_inf, "ELAPSED: %ld", start);
 
   	start = clock();
-	Z_inf(0, "%d threads, stepped (malloc'ed): %d", THREAD_CNT, STEP_SIZE);
+	Z_log(Z_inf, "%d threads, stepped (malloc'ed): %d", THREAD_CNT, STEP_SIZE);
 	err_cnt += test_cbuf_threaded(1);
 	start = clock() - start;
-	Z_inf(0, "ELAPSED: %ld", start);
+	Z_log(Z_inf, "ELAPSED: %ld", start);
 
 out:
 	return err_cnt;
@@ -223,7 +223,7 @@ int test_cbuf_threaded()
 		pthread_join(snd_thr[i], &ret);
 		busywait_snd += (uint64_t)ret;
 	}
-	Z_inf(0, "senders: %ld waits", busywait_snd);
+	Z_log(Z_inf, "senders: %ld waits", busywait_snd);
 
 	/* receiver threads */
 	uint64_t busywait_rcv = 0;
@@ -231,7 +231,7 @@ int test_cbuf_threaded()
 		pthread_join(rcv_thr[i], &ret);
 		busywait_rcv += (uint64_t)ret;
 	}
-	Z_inf(0, "receivers: %ld waits", busywait_rcv);
+	Z_log(Z_inf, "receivers: %ld waits", busywait_rcv);
 
 	/* verify non-overlap of cbuf reservations */
 	uint32_t exp_pos = (cbuf_sz_obj(buf) * NUMITER * THREAD_CNT) & buf->overflow_;
@@ -288,7 +288,7 @@ retry:
 				__atomic_add_fetch(&rx_i_sum,
 					__atomic_load_n(&s->i, __ATOMIC_RELAXED),
 					__ATOMIC_RELAXED);
-				//Z_inf(0, "s @%08lx i = %d", (uint64_t)s, s->i);
+				//Z_log(Z_inf, "s @%08lx i = %d", (uint64_t)s, s->i);
 			}
 			cbuf_rcv_rls(b, step_sz);
 		}

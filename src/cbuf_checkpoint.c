@@ -1,17 +1,5 @@
 #include "cbuf_int.h"
 
-#ifdef Z_BLK_LVL
-#undef Z_BLK_LVL
-#endif
-#define Z_BLK_LVL 0
-/*	debug levels:
-	1:
-	2:	alloc/free
-	3:	checkpoints
-	4:
-	5:
-*/
-
 extern int kill_flag;
 
 /*	cbuf_checkpoint_snapshot()
@@ -135,9 +123,6 @@ int		cbuf_checkpoint_loop(struct cbuf *buf)
 	/* log checkpoint done before exiting */
 	__atomic_sub_fetch(&buf->chk_cnt, 1, __ATOMIC_RELAXED);
 
-	Z_inf(3, "%d iter on cbuf checkpoint", i);
+	Z_log(Z_in2, "%d iter on cbuf checkpoint", i);
 	return i;
 }
-
-#undef Z_BLK_LVL
-#define Z_BLK_LVL 0

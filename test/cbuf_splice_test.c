@@ -84,7 +84,7 @@ void *splice_tx(void *args)
 		}
 	}
 	i = cbuf_checkpoint_loop(zs->cb);
-	Z_inf(1, "%d iter on cbuf_checkpoint_verif", i);
+	Z_log(Z_inf, "%d iter on cbuf_checkpoint_verif", i);
 
 out:
 	kill_flag += err_cnt;
@@ -412,10 +412,10 @@ int main(int argc, char **argv)
 		err_cnt += test_splice_integrity();
 		break;
 	default:
-		Z_err("don't know the opcode '%c'", argv[1][0]);
+		Z_log_err("don't know the opcode '%c'", argv[1][0]);
 	}
 
-	Z_inf(0, "source: %ld, dest: %ld", sz_src, sz_sent);
+	Z_log(Z_inf, "source: %ld, dest: %ld", sz_src, sz_sent);
 
 out:
 	/* close zcio_store */

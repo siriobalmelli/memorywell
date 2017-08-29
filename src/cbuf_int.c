@@ -3,17 +3,6 @@
 
 #include <stdlib.h>
 
-#ifdef Z_BLK_LVL
-#undef Z_BLK_LVL
-#endif
-#define Z_BLK_LVL 1
-/* debug levels:
-	1:
-	2:
-	3: cbuf create/del
-	4: unused bytes at time of free_()
-*/
-
 /** INTERNALS **/
 // TODO: add HLE flags to cbuf operations to try and get a speed bump; measure this
 
@@ -28,9 +17,9 @@ struct cbuf *cbuf_create_(uint32_t	obj_sz,
 	b->cbuf_flags = flags;
 
 	uint32_t sz_aligned;
-	/* alignment: obj_sz must be a powqer of 2 */
+	/* alignment: obj_sz must be a power of 2 */
 	sz_aligned = next_pow2(obj_sz );
-	Z_bail_if(sz_aligned < obj_sz,
+	Z_die_if(sz_aligned < obj_sz,
 		"aligned obj_sz overflow: obj_sz=%d > sz_aligned=%d",
 		obj_sz, sz_aligned);
 	obj_sz = sz_aligned;
@@ -51,7 +40,7 @@ struct cbuf *cbuf_create_(uint32_t	obj_sz,
 	/* 'buf_sz' must be a multiple of obj_sz AND a power of 2 */
 	uint32_t buf_sz = obj_sz * obj_cnt;
 	sz_aligned = next_pow2(next_mult32(buf_sz, obj_sz));
-	Z_bail_if(sz_aligned < buf_sz,
+	Z_die_if(sz_aligned < buf_sz,
 		"aligned buf_sz overflow: buf_sz=%d > sz_aligned=%d",
 		buf_sz, sz_aligned);
 	buf_sz = sz_aligned;
@@ -68,7 +57,7 @@ struct cbuf *cbuf_create_(uint32_t	obj_sz,
 		b->buf = malloc(buf_sz)
 		), "buf_sz = %d", buf_sz);
 
-	Z_inf(3, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d flags='%s'",
+	Z_log(Z_in2, "cbuf @0x%lx size=%d obj_sz=%d overflow_=0x%x sz_bitshift_=%d flags='%s'",
 		(uint64_t)b, cbuf_sz_buf(b), cbuf_sz_obj(b),
 		b->overflow_, b->sz_bitshift_,
 		cbuf_flags_prn_(b->cbuf_flags));
@@ -83,10 +72,10 @@ void cbuf_free_(struct cbuf *buf)
 	/* sanity */
 	if (!buf)
 		return;
-	Z_DO(4, /*  only issue warning if debug level is 4 */
-		Z_warn_if(buf->sz_ready, "cbuf @0x%lx: %ld bytes unconsumed",
+	if (Z_LOG_LVL & Z_in3) {	/* only issue warning if debug level is 4 */
+		Z_wrn_if(buf->sz_ready, "cbuf @0x%lx: %ld bytes unconsumed",
 			(uint64_t)buf, buf->sz_ready);
-	);
+	}
 
 	/* mark buffer closing, wait for any pending checkpoints */
 	uint16_t cnt = __atomic_or_fetch(&buf->chk_cnt, CBUF_CHK_CLOSING, __ATOMIC_RELAXED);
@@ -101,7 +90,7 @@ void cbuf_free_(struct cbuf *buf)
 	if (temp)
 		free(temp);
 
-	Z_inf(3, "cbuf @0x%lx", (uint64_t)buf);
+	Z_log(Z_in2, "cbuf @0x%lx", (uint64_t)buf);
 	free(buf);
 }
 
@@ -266,6 +255,3 @@ const char *cbuf_flags_prn_(uint8_t cbuf_flags)
 out:
 	return NULL;
 }
-
-#undef Z_BLK_LVL
-#define Z_BLK_LVL 0

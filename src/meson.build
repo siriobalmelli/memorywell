@@ -1,4 +1,5 @@
-lib_files = [ 'cbuf.c', 'cbuf_checkpoint.c', 'cbuf_int.c', 'meson.build', 'zcio.c' ]
+# TODO: add back in 'zcio.c'
+lib_files = [ 'cbuf.c', 'cbuf_checkpoint.c', 'cbuf_int.c' ]
 
 
 # We are being build stand-alone,
@@ -7,7 +8,8 @@ if not meson.is_subproject()
 	cbuf = shared_library(meson.project_name(),
 				lib_files,
 				include_directories : inc,
-				install : true)
+				install : true,
+				dependencies : deps)
 
 	# don't set anything here, rely on variables declared in toplevel file
 	pkg = import('pkgconfig')
