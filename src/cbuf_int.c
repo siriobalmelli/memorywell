@@ -77,7 +77,7 @@ void cbuf_free_(struct cbuf *buf)
 	/* mark buffer closing, wait for any pending checkpoints */
 	uint16_t cnt = __atomic_or_fetch(&buf->chk_cnt, CBUF_CHK_CLOSING, __ATOMIC_RELAXED);
 	while (cnt != CBUF_CHK_CLOSING) { /* this is 0 ongoing checkpoint loops, plus the flag we set */
-		CBUF_YIELD();
+		sched_yield();
 		cnt = __atomic_load_n(&buf->chk_cnt, __ATOMIC_RELAXED);
 	}
 

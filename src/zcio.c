@@ -83,7 +83,7 @@ size_t			zcio_in_splice(struct zcio_store *zs,
 	/* notice we are not looping on a partial read/splice */
 	} while (zb->data_len == -1 && errno == EWOULDBLOCK
 		/* the below are tested/executed only if we would block: */
-		&& !CBUF_YIELD() /* don't spinlock */
+		&& !sched_yield() /* don't spinlock */
 		&& !(errno = 0)); /* resets errno ONLY if we will retry */
 
 	/* if got error, reset to "nothing" */
@@ -168,7 +168,7 @@ size_t			zcio_out_splice_sub(struct zcio_store *zs,
 		}
 	} while ((temp == -1) && errno == EWOULDBLOCK
 		/* the below are tested/executed only if we would block: */
-		&& !CBUF_YIELD() /* don't spinlock */
+		&& !sched_yield() /* don't spinlock */
 		&& !(errno = 0)); /* resets errno ONLY if we will retry */
 
 	/* haz error? */

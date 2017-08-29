@@ -20,6 +20,7 @@ NOTE: caller must interface with cbuf 'cb' DIRECTLY - no cbuf
 #include <sys/uio.h>
 
 #include <cbuf.h>
+#include <unistd.h> /* read() */
 
 #define ZCIO_SPLICE_FLAGS ( SPLICE_F_NONBLOCK | SPLICE_F_GIFT | SPLICE_F_MOVE )
 

@@ -19,6 +19,8 @@
 #include <zed_dbg.h>
 #include <pthread.h>
 
+#include <sys/mman.h>
+
 /* threads executing splice ops */
 void *splice_tx(void *args);
 void *splice_rx(void *args);
@@ -34,7 +36,8 @@ char *map_dir = NULL;
 #define BLK_CNT	1024
 #define BLK_SZ 8192
 
-sig_atomic_t kill_flag = 0;
+volatile int kill_flag = 0;
+
 int src_fd = 0, dst_fd = 0;
 void *src_buf = NULL, *dst_buf = NULL;
 size_t sz_src = 0, sz_sent = 0;
@@ -144,8 +147,8 @@ void run_splice_test()
 	pthread_t tx_thr = 0;
 	pthread_t rx_thr = 0;
 
-	Z_die_if(pthread_create(&tx_thr, NULL, splice_tx, NULL);
-	Z_die_if(pthread_create(&rx_thr, NULL, splice_rx, NULL);
+	Z_die_if(pthread_create(&tx_thr, NULL, splice_tx, NULL), "");
+	Z_die_if(pthread_create(&rx_thr, NULL, splice_rx, NULL), "");
 
 	pthread_join(tx_thr, NULL);
 	pthread_join(rx_thr, NULL);

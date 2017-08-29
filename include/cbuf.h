@@ -188,17 +188,11 @@ pos & sz_overflow_
 #include <zed_dbg.h>
 
 #include <stdint.h> /* [u]int[blah] */
-//#include <sys/types.h>
-#include <unistd.h> /* usleep() */
+#include <sched.h>
 
 /*
 	DEFINES
 */
-#define CBUF_YIELD() usleep(1000)	/* Effectively a pthread_yield(),
-					without including threading libraries.
-
-*/
-
 #define CBUF_CHK_CLOSING	0x8000	/* cbuf closing. stop checkpointing.
 					This is the high bit in `chk_cnt` below.
 						*/

@@ -116,7 +116,7 @@ int		cbuf_checkpoint_loop(struct cbuf *buf)
 			break;
 		}
 
-		CBUF_YIELD();
+		sched_yield();
 	}
 
 	/* log checkpoint done before exiting */

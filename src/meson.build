@@ -1,5 +1,4 @@
-# TODO: add back in 'zcio.c'
-lib_files = [ 'cbuf.c', 'cbuf_checkpoint.c', 'cbuf_int.c' ]
+lib_files = [ 'cbuf.c', 'cbuf_checkpoint.c', 'cbuf_int.c', 'zcio.c' ]
 
 
 # We are being build stand-alone,

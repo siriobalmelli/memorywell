@@ -4,6 +4,8 @@
 
 #include <pthread.h>
 
+#include <sys/mman.h>
+
 #define STEP_SIZE 32	/* How many blocks should we try to reserve at one time */
 //#define NUMITER 4800000
 #define NUMITER 756432	/* Number of read-writes PER THREAD. */
@@ -12,7 +14,7 @@
 #define OBJ_SZ (sizeof(struct sequence) *1UL)
 #define OBJ_CNT (STEP_SIZE * 100UL)
 
-sig_atomic_t kill_flag = 0; /* global kill flag assumed by mtsig */
+volatile int kill_flag = 0; /* global kill flag assumed by mtsig */
 
 struct sequence {
 	int		i;
@@ -213,8 +215,8 @@ int test_cbuf_threaded()
 	pthread_t snd_thr[THREAD_CNT];
 	pthread_t rcv_thr[THREAD_CNT];
 	for (i=0; i < THREAD_CNT; i++) {
-		rcv_thr[i] = mts_launch(rcv_thread, buf, mts_free_noop, NULL);
-		snd_thr[i] = mts_launch(snd_thread, buf, mts_free_noop, NULL);
+		Z_die_if(pthread_create(&rcv_thr[i], NULL, rcv_thread, buf), "");
+		Z_die_if(pthread_create(&snd_thr[i], NULL, snd_thread, buf), "");
 	}
 
 	/* recover sender threads, and get amount of busywaits */
@@ -259,13 +261,9 @@ out:
 
 void *rcv_thread(void *args)
 {
-	volatile uint64_t busy_waits = 0; /* volatile because mts_jump */
-	mts_setup_thr_();
+	uint64_t busy_waits = 0;
 
 	struct cbuf *b = (struct cbuf *)args;
-	mts_jump_set_
-	mts_jump_reinit_exec_
-	mts_jump_end_block_
 
 	struct sequence *s;
 	uint32_t pos;
@@ -280,7 +278,7 @@ retry:
 		if (pos == -1) {
 			/* if no reservation available, busy-wait */
 			busy_waits++;
-			pthread_yield();
+			sched_yield();
 			goto retry;
 		} else {
 			for (j=0; j < step_sz; j++) {
@@ -296,20 +294,15 @@ retry:
 
 	}
 
-	mts_cleanup_thr_();
 	/* return number of busy-waits we had to go through */
 	pthread_exit((void*)busy_waits);
 }
 
 void *snd_thread(void *args)
 {
-	volatile uint64_t busy_waits = 0;
-	mts_setup_thr_();
+	uint64_t busy_waits = 0;
 
 	struct cbuf *b = (struct cbuf *)args;
-	mts_jump_set_
-	mts_jump_reinit_exec_
-	mts_jump_end_block_
 
 	int i, j;
 	struct sequence *s;
@@ -325,7 +318,7 @@ retry:
 		if (pos == -1) {
 			/* if no reservation available, busy-wait */
 			busy_waits++;
-			pthread_yield();
+			sched_yield();
 			goto retry;
 		} else {
 			/* add to the sequence */
@@ -343,7 +336,6 @@ retry:
 	}
 	i = cbuf_checkpoint_loop(b);
 
-	mts_cleanup_thr_();
 	/* return number of busy-waits we had to go through */
 	pthread_exit((void*)busy_waits);
 }
