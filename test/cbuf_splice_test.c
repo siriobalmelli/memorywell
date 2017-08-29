@@ -15,9 +15,9 @@
 /* unlink */
 #include <unistd.h>
 
-#include "zcio.h"
-#include "mtsig.h"
-#include "zed_dbg.h"
+#include <zcio.h>
+#include <zed_dbg.h>
+#include <pthread.h>
 
 /* threads executing splice ops */
 void *splice_tx(void *args);
@@ -42,12 +42,6 @@ struct zcio_store *zs = NULL;
 
 void *splice_tx(void *args)
 {
-	mts_setup_thr_();
-
-	mts_jump_set_
-	mts_jump_reinit_exec_
-	mts_jump_end_block_
-
 	int err_cnt = 0;
 	int fittings[2];
 	Z_die_if(pipe(fittings), "");
@@ -92,18 +86,11 @@ out:
 		close(fittings[0]);
 	if (fittings[1])
 		close(fittings[1]);
-	mts_cleanup_thr_();
 	pthread_exit(NULL);
 }
 
 void *splice_rx(void *args)
 {
-	mts_setup_thr_();
-
-	mts_jump_set_
-	mts_jump_reinit_exec_
-	mts_jump_end_block_
-
 	int err_cnt = 0;
 	int fittings[2];
 	Z_die_if(pipe(fittings), "");
@@ -146,7 +133,6 @@ out:
 		close(fittings[0]);
 	if (fittings[1])
 		close(fittings[1]);
-	mts_cleanup_thr_();
 	pthread_exit(NULL);
 }
 
@@ -155,11 +141,17 @@ src_file ->[tx_thread]-> cbuf ->[rx_thread]-> dst_file
 */
 void run_splice_test()
 {
-	pthread_t tx_thr = mts_launch(splice_tx, NULL, NULL, NULL);
-	pthread_t rx_thr = mts_launch(splice_rx, NULL, NULL, NULL);
+	pthread_t tx_thr = 0;
+	pthread_t rx_thr = 0;
+
+	Z_die_if(pthread_create(&tx_thr, NULL, splice_tx, NULL);
+	Z_die_if(pthread_create(&rx_thr, NULL, splice_rx, NULL);
 
 	pthread_join(tx_thr, NULL);
 	pthread_join(rx_thr, NULL);
+
+out:
+	return;
 }
 
 /*	straight_splice()
@@ -357,7 +349,6 @@ int main(int argc, char **argv)
 {
 	/* sanity */
 	int err_cnt = 0;
-	mtsig_util_sigsetup(mtsig_util_handler);
 
 	/* arguments */
 	Z_die_if(argc < 2 || argc > 5,

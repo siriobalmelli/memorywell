@@ -1,7 +1,4 @@
-#include "cbuf_int.h"
-#include "bits.h"
-
-#include <stdlib.h>
+#include <cbuf_int.h>
 
 /** INTERNALS **/
 // TODO: add HLE flags to cbuf operations to try and get a speed bump; measure this
@@ -18,7 +15,7 @@ struct cbuf *cbuf_create_(uint32_t	obj_sz,
 
 	uint32_t sz_aligned;
 	/* alignment: obj_sz must be a power of 2 */
-	sz_aligned = next_pow2(obj_sz );
+	sz_aligned = nm_next_pow2(obj_sz );
 	Z_die_if(sz_aligned < obj_sz,
 		"aligned obj_sz overflow: obj_sz=%d > sz_aligned=%d",
 		obj_sz, sz_aligned);
@@ -39,7 +36,7 @@ struct cbuf *cbuf_create_(uint32_t	obj_sz,
 
 	/* 'buf_sz' must be a multiple of obj_sz AND a power of 2 */
 	uint32_t buf_sz = obj_sz * obj_cnt;
-	sz_aligned = next_pow2(next_mult32(buf_sz, obj_sz));
+	sz_aligned = nm_next_pow2(nm_next_mult32(buf_sz, obj_sz));
 	Z_die_if(sz_aligned < buf_sz,
 		"aligned buf_sz overflow: buf_sz=%d > sz_aligned=%d",
 		buf_sz, sz_aligned);
@@ -170,7 +167,7 @@ void cbuf_release_scary__(struct cbuf		*buf,
 			volatile int64_t	*sz_dest)
 {
 	if (*reserved < blk_sz) {
-		Z_wrn("blk_sz %ld > %d reserved", blk_sz, *reserved);
+		Z_log_wrn("blk_sz %ld > %d reserved", blk_sz, *reserved);
 		return;
 	}
 	/* remove from reserved */

@@ -184,12 +184,12 @@ pos & sz_overflow_
 288 & 255 = 32
 */
 
+#include <nonlibc.h>
+#include <zed_dbg.h>
+
 #include <stdint.h> /* [u]int[blah] */
 //#include <sys/types.h>
 #include <unistd.h> /* usleep() */
-
-#include "zed_dbg.h"
-
 
 /*
 	DEFINES
@@ -265,9 +265,9 @@ typedef struct {
 */
 
 /* compute some basic values out of a cbuf struct */
-Z_INL_FORCE uint32_t cbuf_sz_buf(struct cbuf *cb) { return cb->overflow_ + 1; }
-Z_INL_FORCE uint32_t cbuf_sz_obj(struct cbuf *cb) { return 1 << cb->sz_bitshift_; }
-Z_INL_FORCE uint32_t cbuf_blk_cnt(struct cbuf *cb) { return cbuf_sz_buf(cb) >> cb->sz_bitshift_; }
+NLC_INLINE uint32_t cbuf_sz_buf(struct cbuf *cb) { return cb->overflow_ + 1; }
+NLC_INLINE uint32_t cbuf_sz_obj(struct cbuf *cb) { return 1 << cb->sz_bitshift_; }
+NLC_INLINE uint32_t cbuf_blk_cnt(struct cbuf *cb) { return cbuf_sz_buf(cb) >> cb->sz_bitshift_; }
 
 /* create/free */
 struct cbuf *cbuf_create(uint32_t obj_sz, uint32_t obj_cnt);
@@ -308,7 +308,7 @@ The contiguous set of buffer blocks may exist partly at the end of the
 This function exists to hide the masking necessary to roll over from the end to
 	the beginning of the buffer.
 	*/
-Z_INL_FORCE void *cbuf_offt(struct cbuf *cb, struct cbuf_blk_ref cbr)
+NLC_INLINE void *cbuf_offt(struct cbuf *cb, struct cbuf_blk_ref cbr)
 {
 	cbr.pos += cbr.i << cb->sz_bitshift_; /* purrformance */
 	return (void *)(cb->buf + (cbr.pos & cb->overflow_));

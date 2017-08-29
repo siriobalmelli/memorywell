@@ -1,7 +1,8 @@
-#include "cbuf.h"
-#include "mtsig.h"
-#include "zcio.h"
+#include <cbuf.h>
+#include <zcio.h>
 #include <time.h>
+
+#include <pthread.h>
 
 #define STEP_SIZE 32	/* How many blocks should we try to reserve at one time */
 //#define NUMITER 4800000

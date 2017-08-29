@@ -1,11 +1,9 @@
 #ifndef cbuf_int_h_
 #define cbuf_int_h_
 
-#include "cbuf.h"
-
-/* internals */
-uint32_t next_pow2(uint32_t x);
-uint32_t next_mult32(uint32_t x, uint32_t mult);
+#include <cbuf.h>
+#include <nmath.h>
+#include <stdlib.h>
 
 struct cbuf *cbuf_create_(uint32_t	obj_sz,
 			uint32_t	obj_cnt,

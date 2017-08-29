@@ -10,6 +10,8 @@ NOTE: caller must interface with cbuf 'cb' DIRECTLY - no cbuf
 	functionality is duplicated by this library.
 */
 
+#include <nonlibc.h>
+
 #ifndef _GNU_SOURCE
 	#define _GNU_SOURCE
 	/* splice */
@@ -17,7 +19,7 @@ NOTE: caller must interface with cbuf 'cb' DIRECTLY - no cbuf
 #include <fcntl.h> /* splice() */
 #include <sys/uio.h>
 
-#include "cbuf.h"
+#include <cbuf.h>
 
 #define ZCIO_SPLICE_FLAGS ( SPLICE_F_NONBLOCK | SPLICE_F_GIFT | SPLICE_F_MOVE )
 
@@ -59,7 +61,7 @@ size_t				zcio_out_splice_sub(struct zcio_store *zs,
 						struct cbuf_blk_ref source,
 						int fd_pipe_to,
 						loff_t sub_offt, size_t sub_len);
-Z_INL_FORCE size_t		zcio_out_splice(struct zcio_store*zs,
+NLC_INLINE size_t		zcio_out_splice(struct zcio_store*zs,
 						struct cbuf_blk_ref source,
 						int fd_pipe_to)
 {
@@ -67,11 +69,11 @@ Z_INL_FORCE size_t		zcio_out_splice(struct zcio_store*zs,
 }
 
 
-Z_INL_FORCE struct zcio_block	*zcio_blk_get(struct zcio_store *zs, struct cbuf_blk_ref cbr)
+NLC_INLINE struct zcio_block	*zcio_blk_get(struct zcio_store *zs, struct cbuf_blk_ref cbr)
 {
 	return cbuf_offt(zs->cb, cbr);
 }
-Z_INL_FORCE void		*zcio_offt(struct zcio_store *zs, struct zcio_block *zb)
+NLC_INLINE void		*zcio_offt(struct zcio_store *zs, struct zcio_block *zb)
 {
 	return zs->iov.iov_base + zb->blk_offset;
 }

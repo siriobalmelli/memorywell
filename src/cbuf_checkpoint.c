@@ -1,7 +1,5 @@
 #include "cbuf_int.h"
 
-extern int kill_flag;
-
 /*	cbuf_checkpoint_snapshot()
 
 Take a "snapshot" of a circular buffer, which can be later be checked to verify
@@ -109,9 +107,10 @@ int		cbuf_checkpoint_loop(struct cbuf *buf)
 	while (!cbuf_checkpoint_verif(buf, &check)) {
 		i++;
 
-		/* handle case where buffer is closing */
-		if ((buf->chk_cnt & CBUF_CHK_CLOSING)
-			|| kill_flag)
+		/* handle case where buffer is closing
+		TODO: used to also check "kill_flag" directly ?!?
+		*/
+		if ((buf->chk_cnt & CBUF_CHK_CLOSING))
 		{
 			i = -1;
 			break;
