@@ -15,7 +15,7 @@ struct cbuf *cbuf_create_(uint32_t	obj_sz,
 
 	uint32_t sz_aligned;
 	/* alignment: obj_sz must be a power of 2 */
-	sz_aligned = nm_next_pow2(obj_sz );
+	sz_aligned = nm_next_pow2_32(obj_sz );
 	Z_die_if(sz_aligned < obj_sz,
 		"aligned obj_sz overflow: obj_sz=%d > sz_aligned=%d",
 		obj_sz, sz_aligned);
@@ -36,7 +36,7 @@ struct cbuf *cbuf_create_(uint32_t	obj_sz,
 
 	/* 'buf_sz' must be a multiple of obj_sz AND a power of 2 */
 	uint32_t buf_sz = obj_sz * obj_cnt;
-	sz_aligned = nm_next_pow2(nm_next_mult32(buf_sz, obj_sz));
+	sz_aligned = nm_next_pow2_32(nm_next_mult32(buf_sz, obj_sz));
 	Z_die_if(sz_aligned < buf_sz,
 		"aligned buf_sz overflow: buf_sz=%d > sz_aligned=%d",
 		buf_sz, sz_aligned);
