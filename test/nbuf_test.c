@@ -2,6 +2,12 @@
 #include <nbuf.h>
 #include <stdlib.h>
 
+/*	benchmark/test cases
+-	queue mostly empty
+-	queue mostly full
+-	max throughput (what Tony is doing now)
+*/
+
 const size_t numiter = 100000000;
 
 int main()
