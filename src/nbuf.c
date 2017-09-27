@@ -38,12 +38,15 @@ int nbuf_params(size_t blk_sz, size_t blk_cnt, struct nbuf *out)
 	out->ct.overflow = nm_next_pow2_64(size);
 	Z_die_if(out->ct.overflow < size, "buffer size %zu overflow", size);
 
+	/* mark available slots-count */
+	out->tx.avail = out->ct.overflow / out->ct.blk_sz;
 	/* derive a bitmask from size */
 	out->ct.overflow--;
 
 out:
 	return err_cnt;
 }
+
 
 /*	nbuf_reserve_single()
 A single producer/consumer reserves a buffer block.
@@ -58,21 +61,25 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
 				size_t			blk_cnt)
 {
-	/* Non-critical: derive number of bytes wanted and read SOME value of availability;
-		compiler free to speculate on whether this op will succeed.
-	*/
+	/* derive number of bytes wanted */
 	size_t size;
 	if (__builtin_mul_overflow(blk_cnt, ct->blk_sz, &size))
 		return -1;
+
+
+	/*	critical section
+
+	Data synchronization with other threads relies on these calls,
+		so minimum memory model here is ACQUIRE.
+	Also, no operation on 'pos' should be hoisted into/above this block.
+	*/
+#ifdef NBUF_CAS
 	size_t avail = __atomic_load_n(&from->avail, __ATOMIC_RELAXED);
 	if (avail < size)
 		return -1;
 
 	/* Loop on spurious failures or other writes as long as we still have
 		a chance to reserve.
-	Data synchronization with other threads relies on these calls,
-		so minimum memory model here is ACQUIRE.
-	Also, no operation on 'pos' should be hoisted into/above this block.
 	*/
 	while (!(__atomic_compare_exchange_n(&from->avail, &avail, avail-size, 1,
 					__ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)
@@ -80,10 +87,25 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 		if (avail < size)
 			return -1;
 	}
+#else
+	size_t avail = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
+	if (!avail) {
+		return -1;
+	} else if (avail < size) {
+		__atomic_add_fetch(&from->avail, avail, __ATOMIC_RELAXED);
+		return -1;
+	} else {
+		/* Only ever ADD back in: otherwise multiple concurrent
+			failures would either lose data or have to CAS-loop.
+		*/
+		__atomic_add_fetch(&from->avail, avail-size, __ATOMIC_RELAXED);
+	};
+#endif
+
 
 	/* post-critical: we've synchronized availability
-		and don't contend for position since we're single
-		__on this side of the buf__
+		and don't contend for position since we're _single()
+		**on this side of the buf** - other side may be _multi()!
 	*/
 	return from->pos += size;
 }
