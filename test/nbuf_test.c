@@ -4,11 +4,15 @@
 #include <pthread.h>
 
 
-/*	benchmark/test cases
-For each of a set of element sizes:
--	queue mostly empty
--	queue mostly full
--	max throughput; with varying reservation sizes
+/*	SPSC benchmark/test cases
+
+- for varying block sizes
+- for varying block counts in the buffer
+- for varying reservation lengths
+
+Change paradigm:
+a.) generate random bytes INTO the block
+b.) hash the bytes (fnv1a) at source and at destination; verify they agree
 */
 
 const size_t numiter = 100000000;
