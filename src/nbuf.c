@@ -4,7 +4,12 @@
 
 /* TODO:
 	- compiler barf if size_t is not atomic
-	- generic nmath functions so the 32-bit case is cared for
+	- generic nmath functions so 32-bit size_t case is cared for
+	- implement differing compile-time concurrency strategies:
+		i.) CAS loop
+		ii.) Exchange
+		iii.) Mutex
+		iv.) Spinlock
 */
 
 

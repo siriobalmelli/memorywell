@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 /*	benchmark/test cases
+For each of a set of element sizes:
 -	queue mostly empty
 -	queue mostly full
 -	max throughput (what Tony is doing now)
