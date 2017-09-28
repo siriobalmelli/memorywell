@@ -2,6 +2,8 @@
 #include <nbuf.h>
 #include <nmath.h>
 
+#include <sched.h> /* sched_yield() */
+
 /* TODO:
 	- compiler barf if size_t is not atomic
 	- generic nmath functions so 32-bit size_t case is cared for
@@ -9,7 +11,7 @@
 		i.) CAS loop
 		ii.) Exchange
 		iii.) Mutex
-		iv.) Spinlock
+		iv.) Spinlock?
 */
 
 
@@ -53,6 +55,47 @@ out:
 }
 
 
+/*	nbuf_init()
+Initialize an nbuf struct 'nb' with (caller-allocated) 'mem'.
+This function expects 'nb' to have had nbuf_params() successfully called on it,
+	and for 'mem' to be at least nbuf_size(nb) large.
+
+The reason for this more complicated initialization pattern is to allow
+	caller full control over 'mem' without bringing complexities
+	into this library.
+
+returns 0 on success
+*/
+int nbuf_init(struct nbuf *nb, void *mem)
+{
+	int err_cnt = 0;
+	Z_die_if(!mem, "");
+
+	nb->ct.buf = mem;
+
+#if (NBUF_TECHNIQUE == NBUF_DO_MTX)
+	Z_die_if(pthread_mutex_init(&nb->tx.lock, NULL), "");
+	Z_die_if(pthread_mutex_init(&nb->rx.lock, NULL), "");
+#endif
+
+out:
+	return err_cnt;
+}
+
+
+/*	nbuf_deinit()
+*/
+void nbuf_deinit(struct nbuf *nb)
+{
+#if (NBUF_TECHNIQUE == NBUF_DO_MTX)
+	Z_die_if(pthread_mutex_destroy(&nb->tx.lock), "");
+	Z_die_if(pthread_mutex_destroy(&nb->rx.lock), "");
+out:
+	return;
+#endif
+}
+
+
 /*	nbuf_reserve_single()
 A single producer/consumer reserves a buffer block.
 
@@ -78,41 +121,60 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 		so minimum memory model here is ACQUIRE.
 	Also, no operation on 'pos' should be hoisted into/above this block.
 	*/
-#ifdef NBUF_CAS
+#if (NBUF_TECHNIQUE == NBUF_DO_CAS)
 	size_t avail = __atomic_load_n(&from->avail, __ATOMIC_RELAXED);
 	if (avail < size)
-		return -1;
+		goto fail;
 
 	/* Loop on spurious failures or other writes as long as we still have
 		a chance to reserve.
 	*/
 	while (!(__atomic_compare_exchange_n(&from->avail, &avail, avail-size, 1,
-					__ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)
+					__ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
 	)) {
 		if (avail < size)
-			return -1;
+			goto fail;
 	}
-#else
+
+#elif (NBUF_TECHNIQUE == NBUF_DO_XCH)
 	size_t avail = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
 	if (!avail) {
-		return -1;
+		goto fail;
 	} else if (avail < size) {
 		__atomic_add_fetch(&from->avail, avail, __ATOMIC_RELAXED);
-		return -1;
+		goto fail;
 	} else {
 		/* Only ever ADD back in: otherwise multiple concurrent
 			failures would either lose data or have to CAS-loop.
 		*/
 		__atomic_add_fetch(&from->avail, avail-size, __ATOMIC_RELAXED);
 	};
+
+#elif (NBUF_TECHNIQUE == NBUF_DO_MTX)
+	size_t ret = -1;
+	pthread_mutex_lock(&from->lock);
+		if (from->avail >= size) {
+			from->avail -= size;
+			ret = from->pos;
+			from->pos += size;
+		}
+	pthread_mutex_unlock(&from->lock);
+	return ret;
+
+#else
+#error "nbuf technique not implemented"
 #endif
 
-
+#if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
 	/* post-critical: we've synchronized availability
 		and don't contend for position since we're _single()
 		**on this side of the buf** - other side may be _multi()!
 	*/
-	return from->pos += size;
+	return __atomic_fetch_add(&from->pos, size, __ATOMIC_RELAXED);
+fail:
+	sched_yield();
+	return -1;
+#endif
 }
 
 
@@ -126,6 +188,18 @@ int nbuf_release_single(const struct nbuf_const	*ct,
 	size_t size;
 	if (__builtin_mul_overflow(blk_cnt, ct->blk_sz, &size))
 		return -1;
+
+#if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
 	__atomic_add_fetch(&to->avail, size, __ATOMIC_RELEASE);
+
+#elif (NBUF_TECHNIQUE == NBUF_DO_MTX)
+	pthread_mutex_lock(&to->lock);
+		to->avail += size;
+	pthread_mutex_unlock(&to->lock);
+
+#else
+#error "nbuf technique not implemented"
+#endif
+
 	return 0;
 }

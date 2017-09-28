@@ -3,86 +3,92 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+
 /*	benchmark/test cases
 For each of a set of element sizes:
 -	queue mostly empty
 -	queue mostly full
--	max throughput (what Tony is doing now)
+-	max throughput; with varying reservation sizes
 */
 
 const size_t numiter = 100000000;
-const size_t thread_cnt = 1;
+const size_t blk_cnt = 256; /* how many blocks in the cbuf */
+const size_t reservation = 1; /* how many blocks to reserve at once */
 
-void* tx_thread(void *arg);
-void* rx_thread(void *arg);
+/*	tx_thread()
+*/
+void* tx_thread(void* arg)
+{
+	struct nbuf *nb = arg;
+	size_t tally = 0;
 
-uint64_t tx_i_sum = 0;
-uint64_t rx_i_sum = 0;
+	/* TX thread */
+	for (size_t i=0; i < numiter; i += reservation) {
+		size_t pos;	
+		while ((pos = nbuf_reserve_single(&nb->ct, &nb->tx, reservation)) == -1)
+			; /* spinlock like a bitch */
+		for (size_t j=0; j < reservation; j++)
+			NBUF_DEREF(size_t, pos, j, nb) = i;
+		Z_die_if(nbuf_release_single(&nb->ct, &nb->rx, 1), "");
+		tally += i;
+	}
 
+out:
+	return (void *)tally;
+}
+
+
+/*	rx_thread()
+*/
+void* rx_thread(void* arg)
+{
+	struct nbuf *nb = arg;
+	size_t tally = 0;
+
+	/* RX thread */
+	for (size_t i=0; i < numiter; i += reservation) {
+		size_t pos;
+		while ((pos = nbuf_reserve_single(&nb->ct, &nb->rx, reservation)) == -1)
+			; /* spinlock like a bitch */
+		for (size_t j=0; j < reservation; j++)
+			tally += NBUF_DEREF(size_t, pos, j, nb);
+		Z_die_if(nbuf_release_single(&nb->ct, &nb->tx, 1), "");
+	}
+
+out:
+	return (void *)tally;
+}
+
+
+/*	main()
+*/
 int main()
 {
 	int err_cnt = 0;
 
-	struct nbuf nb = { 0 };
-	Z_die_if(nbuf_params(sizeof(uint64_t), numiter, &nb), "");
-	Z_die_if(!(
-		malloc(nbuf_size(&nb))
-		), "size %zu", nbuf_size(&nb));
+	/* create buffer */
+	struct nbuf nb = { {0} };
+	Z_die_if(
+		nbuf_params(sizeof(size_t), blk_cnt, &nb)
+		, "");
+	Z_die_if(
+		nbuf_init(&nb, malloc(nbuf_size(&nb)))
+		, "size %zu", nbuf_size(&nb));
 
-	pthread_t tx;
-	pthread_t rx;
-	pthread_create(&tx, NULL, &rx_thread, &nb);
-	pthread_create(&rx, NULL, &tx_thread, &nb);
+	/* fire reader-writer threads */
+	pthread_t tx, rx;
+	pthread_create(&tx, NULL, rx_thread, &nb);
+	pthread_create(&rx, NULL, tx_thread, &nb);
 
 	/* wait for threads to finish */
-	void* ret;
-	pthread_join(tx, &ret);
-	pthread_join(rx, &ret);
+	size_t tx_i_sum = 0, rx_i_sum = 0;
+	pthread_join(tx, (void*)&tx_i_sum);
+	pthread_join(rx, (void*)&rx_i_sum);
 
 	/* verify sums */
-	uint64_t verif_i_sum = (numiter -1) * 0.5 * numiter * thread_cnt;
-	Z_die_if(verif_i_sum != tx_i_sum,
-		"tx_i_sum %ld - verif_i_sum %ld = %ld",
-		tx_i_sum, verif_i_sum, tx_i_sum - verif_i_sum);
-	Z_die_if(rx_i_sum != tx_i_sum,
-		"rx_i_sum %ld - tx_i_sum %ld = %ld\n",
-		rx_i_sum, tx_i_sum, rx_i_sum - tx_i_sum);
+	Z_die_if(tx_i_sum != rx_i_sum, "%zu != %zu", tx_i_sum, rx_i_sum);
 
 out:
+	free(nb.ct.buf);
 	return err_cnt;
-}
-
-void* tx_thread(void* arg)
-{
-	struct nbuf nb = *((struct nbuf*)arg);
-
-	/* TX thread */
-	for (size_t i=0; i < numiter; i++) {
-		size_t pos;	
-		while ((pos = nbuf_reserve_single(&nb.ct, &nb.tx, 1)) == -1)
-			; /* spinlock like a bitch */
-		*((uint64_t*)nbuf_access(pos, 0, &nb)) = i;
-		tx_i_sum += i;
-		Z_die_if(nbuf_release_single(&nb.ct, &nb.rx, 1), "");
-	}
-
-out:
-	return NULL;
-}
-
-void* rx_thread(void* arg)
-{
-	struct nbuf nb = *((struct nbuf*)arg);
-
-	/* RX thread */
-	for (size_t i=0; i < numiter; i++) {
-		size_t pos;
-		while ((pos = nbuf_reserve_single(&nb.ct, &nb.rx, 1)) == -1)
-			; /* spinlock like a bitch */
-		rx_i_sum += *((uint64_t*)nbuf_access(pos, 0, &nb));
-		Z_die_if(nbuf_release_single(&nb.ct, &nb.tx, 1), "");
-	}
-
-out:
-	return NULL;
 }

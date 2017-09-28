@@ -3,6 +3,18 @@
 
 #include <stddef.h>
 #include <nonlibc.h>
+#include <pthread.h>
+
+#define NBUF_DO_CAS 1
+#define NBUF_DO_XCH 2
+#define NBUF_DO_MTX 3
+
+#ifndef NBUF_TECHNIQUE
+//#define NBUF_TECHNIQUE NBUF_DO_XCH
+#define NBUF_TECHNIQUE NBUF_DO_CAS
+//#define NBUF_TECHNIQUE NBUF_DO_MTX
+#endif
+
 
 /*	nbuf_const
 Data which should not change after initializiation; goes on it's own
@@ -16,7 +28,6 @@ struct nbuf_const {
 						variable to keep struct size <=64B.
 				       */
 	size_t		blk_sz;		/* Block size is a power of 2 */
-
 };
 
 
@@ -27,9 +38,13 @@ struct nbuf_sym {
 	size_t		pos;	/* head/tail of buffer */
 	size_t		avail;	/* can be reserved */
 
-	/* multi-read or multi-write contention only */
+#if (NBUF_TECHNIQUE == NBUF_DO_MTX)
+	pthread_mutex_t lock;
+#else
+	/* non-locking multi-read or multi-write contention only */
 	size_t		reserved;
 	size_t		uncommitted;
+#endif
 };
 
 
@@ -71,7 +86,11 @@ NLC_INLINE void *nbuf_access(size_t pos, size_t i, const struct nbuf *nb)
 	return nb->ct.buf + (pos & nb->ct.overflow);
 }
 
+#define NBUF_DEREF(type, pos, i, nb) (*((type*)nbuf_access(pos, i, nb)))
+
 int nbuf_params(size_t blk_sz, size_t blk_cnt, struct nbuf *out);
+int nbuf_init(struct nbuf *nb, void *mem);
+void nbuf_deinit(struct nbuf *nb);
 
 size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
