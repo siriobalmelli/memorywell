@@ -7,11 +7,7 @@
 /* TODO:
 	- compiler barf if size_t is not atomic
 	- generic nmath functions so 32-bit size_t case is cared for
-	- implement differing compile-time concurrency strategies:
-		i.) CAS loop
-		ii.) Exchange
-		iii.) Mutex
-		iv.) Spinlock?
+	- speed differential if combining cache lines
 */
 
 
@@ -36,6 +32,8 @@ int nbuf_params(size_t blk_sz, size_t blk_cnt, struct nbuf *out)
 	/* should go away by the time compiler is through with it :P */
 	out->ct.blk_sz = nm_next_pow2_64(blk_sz);
 	Z_die_if(out->ct.blk_sz < blk_sz, "blk_sz %zu overflow", blk_sz);
+	/* left-shift when multiplying by block size */
+	out->ct.blk_shift = nm_bit_pos(out->ct.blk_sz) -1;
 
 	/* final size is not abortive */
 	size_t size;
@@ -99,6 +97,9 @@ out:
 /*	nbuf_reserve_single()
 A single producer/consumer reserves a buffer block.
 
+NOTE: we do NOT sanity-check 'blk_cnt': insanely large values
+	will overflow math and break things.
+
 Returns an opaque 'pos' value which much be properly dereferenced
 	in order to obviate problems looping around the end of the buffer.
 
@@ -110,9 +111,7 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 				size_t			blk_cnt)
 {
 	/* derive number of bytes wanted */
-	size_t size;
-	if (__builtin_mul_overflow(blk_cnt, ct->blk_sz, &size))
-		return -1;
+	size_t size = blk_cnt << ct->blk_shift;
 
 
 	/*	critical section
@@ -179,15 +178,14 @@ fail:
 
 
 /*	nbuf_release_single()
+Reciprocal of nbuf_reserve_single() above; see it's header blurb for notes.
 Return 0 on success
 */
 int nbuf_release_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*to,
 				size_t			blk_cnt)
 {
-	size_t size;
-	if (__builtin_mul_overflow(blk_cnt, ct->blk_sz, &size))
-		return -1;
+	size_t size = blk_cnt << ct->blk_shift;
 
 #if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
 	__atomic_add_fetch(&to->avail, size, __ATOMIC_RELEASE);

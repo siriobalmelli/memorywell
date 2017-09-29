@@ -19,5 +19,6 @@ nbuf_test = executable('nbuf_test', 'nbuf_test.c',
 			link_with : cbuf,
 			dependencies : [ deps, thread_dep ])
 test('nbuf test',
-	nbuf_test)
+	nbuf_test,
+	timeout : 60)
 

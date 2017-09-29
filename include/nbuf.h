@@ -2,6 +2,7 @@
 #define nbuf_h_
 
 #include <stddef.h>
+#include <stdint.h>
 #include <nonlibc.h>
 #include <pthread.h>
 
@@ -15,6 +16,7 @@
 #define NBUF_TECHNIQUE NBUF_DO_CAS
 //#define NBUF_TECHNIQUE NBUF_DO_XCH
 //#define NBUF_TECHNIQUE NBUF_DO_MTX
+/* TODO: Spinlock? */
 #endif
 
 
@@ -30,6 +32,7 @@ struct nbuf_const {
 						variable to keep struct size <=64B.
 				       */
 	size_t		blk_sz;		/* Block size is a power of 2 */
+	uint8_t		blk_shift;	/* multiply by blk_sz using a shift */
 };
 
 
@@ -84,7 +87,7 @@ NLC_INLINE size_t nbuf_blk_sz(const struct nbuf *nb)
 
 NLC_INLINE void *nbuf_access(size_t pos, size_t i, const struct nbuf *nb)
 {
-	pos += i * nb->ct.blk_sz;
+	pos += i << nb->ct.blk_shift;
 	return nb->ct.buf + (pos & nb->ct.overflow);
 }
 
