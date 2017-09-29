@@ -1,4 +1,5 @@
-lib_files = [ 'cbuf.c', 'cbuf_checkpoint.c', 'cbuf_int.c', 'nbuf.c' ]
+lib_files = [ 'cbuf.c', 'cbuf_checkpoint.c', 'cbuf_int.c' ]
+lib_nbuf =  [ 'nbuf.c']
 # zcio.c
 
 
@@ -10,6 +11,27 @@ if not meson.is_subproject()
 				include_directories : inc,
 				install : true,
 				dependencies : deps)
+
+	nbuf_cas = shared_library('nbuf_cas',
+				lib_nbuf,
+				include_directories : inc,
+				install : true,
+				dependencies : deps,
+				c_args : ['-DNBUF_TECHNIQUE=NBUF_DO_CAS'])
+
+	nbuf_xch = shared_library('nbuf_xch',
+				lib_nbuf,
+				include_directories : inc,
+				install : true,
+				dependencies : deps,
+				c_args : ['-DNBUF_TECHNIQUE=NBUF_DO_XCH'])
+
+	nbuf_mtx = shared_library('nbuf_mtx',
+				lib_nbuf,
+				include_directories : inc,
+				install : true,
+				dependencies : deps,
+				c_args : ['-DNBUF_TECHNIQUE=NBUF_DO_MTX'])
 
 	# don't set anything here, rely on variables declared in toplevel file
 	pkg = import('pkgconfig')

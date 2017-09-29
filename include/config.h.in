@@ -1,0 +1,5 @@
+#mesondefine NBUF_DO_CAS
+
+#mesondefine NBUF_DO_XCH
+
+#mesondefine NBUF_DO_MTX
