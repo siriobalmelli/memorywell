@@ -26,15 +26,17 @@ void* tx_thread(void* arg)
 	struct nbuf *nb = arg;
 	size_t tally = 0;
 
-	/* TX thread */
+	size_t res_sz = nbuf_reservation_size(nb, reservation);
+	Z_die_if(!res_sz, "reservation count %zu is broken", reservation);
+
+	/* loop on TX */
 	for (size_t i=0; i < numiter; i += reservation) {
 		size_t pos;	
-		while ((pos = nbuf_reserve_single(&nb->ct, &nb->tx, reservation)) == -1)
+		while ((pos = nbuf_reserve_single(&nb->ct, &nb->tx, res_sz)) == -1)
 			; /* spinlock like a bitch */
 		for (size_t j=0; j < reservation; j++)
-			NBUF_DEREF(size_t, pos, j, nb) = i;
-		Z_die_if(nbuf_release_single(&nb->ct, &nb->rx, 1), "");
-		tally += i;
+			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
+		Z_die_if(nbuf_release_single(&nb->ct, &nb->rx, res_sz), "");
 	}
 
 out:
@@ -49,14 +51,17 @@ void* rx_thread(void* arg)
 	struct nbuf *nb = arg;
 	size_t tally = 0;
 
-	/* RX thread */
+	size_t res_sz = nbuf_reservation_size(nb, reservation);
+	Z_die_if(!res_sz, "reservation count %zu is broken", reservation);
+
+	/* loop on RX */
 	for (size_t i=0; i < numiter; i += reservation) {
 		size_t pos;
-		while ((pos = nbuf_reserve_single(&nb->ct, &nb->rx, reservation)) == -1)
+		while ((pos = nbuf_reserve_single(&nb->ct, &nb->rx, res_sz)) == -1)
 			; /* spinlock like a bitch */
 		for (size_t j=0; j < reservation; j++)
 			tally += NBUF_DEREF(size_t, pos, j, nb);
-		Z_die_if(nbuf_release_single(&nb->ct, &nb->tx, 1), "");
+		Z_die_if(nbuf_release_single(&nb->ct, &nb->tx, res_sz), "");
 	}
 
 out:

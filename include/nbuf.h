@@ -74,35 +74,73 @@ struct nbuf {
 };
 
 
-
+/*	nbuf_size()
+Returns the size of the underlying buffer.
+*/
 NLC_INLINE size_t nbuf_size(const struct nbuf *nb)
 {
 	return nb->ct.overflow + 1;
 }
 
+/*	nbuf_blk_sz()
+Returns the size of one buffer block.
+*/
 NLC_INLINE size_t nbuf_blk_sz(const struct nbuf *nb)
 {
 	return nb->ct.blk_sz;
 }
 
+/*	nbuf_access()
+Access a block inside of a reservation;
+	returns a pointer to to the beginning of the block.
+ALWAYS use this function to access blocks - a particular reservation may
+	actually be split; with a portion of it looping around the end of the buffer!
+
+It's conceptually AND computationally cheaper to allow reservations with variable
+	numbers of blocks, and then just accessing each block through this function.
+The alternative would be to either:
+	- only allow single-block reservation calls
+	- perform computational gymnastics to figure out if a requested
+		reservation would loop past the end of the block and return
+		a SHORTER reservation, including communicating that the reservation
+		size has changed.
+Both are inefficient.
+*/
 NLC_INLINE void *nbuf_access(size_t pos, size_t i, const struct nbuf *nb)
 {
 	pos += i << nb->ct.blk_shift;
 	return nb->ct.buf + (pos & nb->ct.overflow);
 }
 
+/*	NBUF_DEREF()
+Helper macro to combine an nbuf_access() with a typecast and a dereference;
+	in a neat, presentable fashion.
+It's main purpose is to avoid giving library users cancer when accessing
+	buffers which contain scalar types such as integers or pointers.
+*/
 #define NBUF_DEREF(type, pos, i, nb) (*((type*)nbuf_access(pos, i, nb)))
 
-int nbuf_params(size_t blk_sz, size_t blk_cnt, struct nbuf *out);
-int nbuf_init(struct nbuf *nb, void *mem);
-void nbuf_deinit(struct nbuf *nb);
 
-size_t nbuf_reserve_single(const struct nbuf_const	*ct,
+int	nbuf_params(		size_t		blk_sz,
+				size_t		blk_cnt,
+				struct nbuf	*out);
+
+int	nbuf_init(		struct nbuf	*nb,
+				void		*mem);
+
+void	nbuf_deinit(		struct nbuf	*nb);
+
+
+size_t __attribute__((const))
+	nbuf_reservation_size(const struct nbuf		*nb,
+				size_t			blk_cnt);
+
+size_t	nbuf_reserve_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
-				size_t			blk_cnt);
+				size_t			size);
 
-int nbuf_release_single(const struct nbuf_const		*ct,
+int	nbuf_release_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*to,
-				size_t			blk_cnt);
+				size_t			size);
 
 #endif /* nbuf_h_ */

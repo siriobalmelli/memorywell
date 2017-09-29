@@ -94,26 +94,46 @@ out:
 }
 
 
+/*	nbuf_reservation_size()
+Compute a sane "reservation size" to pass to _reserve() or _release()
+	functions.
+Reservation size is always a multiple of 'blk_cnt'.
+
+This function exists because caller usually knows reservation size before
+	looping through *many* reservations; makes sense to do this compute
+	only once, and allows us to be more pedantic in checking for errors.
+*/
+size_t __attribute__((const))
+	nbuf_reservation_size(const struct nbuf	*nb, size_t blk_cnt)
+{
+	size_t size;
+	if (__builtin_mul_overflow(blk_cnt, nb->ct.blk_sz, &size))
+		return 0;
+	if (size > nb->ct.overflow +1)
+		return 0;
+	return size;
+}
+
+
 /*	nbuf_reserve_single()
 A single producer/consumer reserves a buffer block.
-
-NOTE: we do NOT sanity-check 'blk_cnt': insanely large values
-	will overflow math and break things.
 
 Returns an opaque 'pos' value which much be properly dereferenced
 	in order to obviate problems looping around the end of the buffer.
 
 Return -1 on failure: -1 is an ODD number and our blocks are size pow(2),
 	and aligned at offset 0; so always EVEN.
+
+NOTE: 'size' is in BYTES (not "blocks") and we do NOT sanity-check 'size':
+	- insanely large values will fail
+	- values not a multiple of blk_sz will irrevocably
+		screw the entire buffer
+THEREFORE: ALWAYS obtain size by calling nbuf_reservation_size();
 */
 size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
-				size_t			blk_cnt)
+				size_t			size)
 {
-	/* derive number of bytes wanted */
-	size_t size = blk_cnt << ct->blk_shift;
-
-
 	/*	critical section
 
 	Data synchronization with other threads relies on these calls,
@@ -183,10 +203,8 @@ Return 0 on success
 */
 int nbuf_release_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*to,
-				size_t			blk_cnt)
+				size_t			size)
 {
-	size_t size = blk_cnt << ct->blk_shift;
-
 #if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
 	__atomic_add_fetch(&to->avail, size, __ATOMIC_RELEASE);
 
