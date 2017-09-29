@@ -1,6 +1,15 @@
 #ifndef nbuf_h_
 #define nbuf_h_
 
+/* shortlist of advantages:
+	- don't need a memory allocator
+	- symmetric: can send data both ways
+	- any block size
+	- multiple blocks per reservation (allows efficient "max possible blocks" scenario)
+	- any combination of single/multiple producer/consumer
+	- fast (split cache lines)
+*/
+
 #include <stddef.h>
 #include <stdint.h>
 #include <nonlibc.h>
@@ -134,6 +143,8 @@ void	nbuf_deinit(		struct nbuf	*nb);
 size_t __attribute__((const))
 	nbuf_reservation_size(const struct nbuf		*nb,
 				size_t			blk_cnt);
+
+/* TODO: function to reserve as many blocks as possible */
 
 size_t	nbuf_reserve_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
