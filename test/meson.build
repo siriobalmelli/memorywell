@@ -34,14 +34,14 @@ nbuf_test_mtx = executable('nbuf_test_mtx', 'nbuf_test.c',
 test('nbuf cas test',
 	nbuf_test_cas,
 	is_parallel : false,
-	timeout : 60)
+	timeout : 1000)
 
 test('nbuf xch test',
 	nbuf_test_xch,
 	is_parallel : false,
-	timeout : 60)
+	timeout : 1000)
 
 test('nbuf mtx test',
 	nbuf_test_mtx,
 	is_parallel : false,
-	timeout : 60)
+	timeout : 2000)
