@@ -14,6 +14,7 @@
 #include <stdint.h>
 #include <nonlibc.h>
 #include <pthread.h>
+
 #include "config.h"
 
 /* in theoretical order of performance */
@@ -95,6 +96,21 @@ NLC_INLINE size_t nbuf_blk_sz(const struct nbuf *nb)
 	return nb->ct.blk_sz;
 }
 
+/*	nbuf_blk_div()
+Divide by the size of a block.
+*/
+NLC_INLINE size_t nbuf_blk_div(const struct nbuf *nb, size_t bytes)
+{
+	return bytes >> nb->ct.blk_shift;
+}
+/*	nbuf_blk_mult()
+Multiply by the size of a block.
+*/
+NLC_INLINE size_t nbuf_blk_mult(const struct nbuf *nb, size_t bytes)
+{
+	return bytes << nb->ct.blk_shift;
+}
+
 /*	nbuf_access()
 Access a block inside of a reservation;
 	returns a pointer to to the beginning of the block.
@@ -145,6 +161,9 @@ size_t __attribute__((const))
 size_t	nbuf_reserve_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
 				size_t			size);
+size_t nbuf_reserve_single_var(const struct nbuf_const	*ct,
+				struct nbuf_sym		*from,
+				size_t			*out_size);
 
 int	nbuf_release_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*to,

@@ -2,8 +2,6 @@
 #include <nbuf.h>
 #include <nmath.h>
 
-#include <sched.h> /* sched_yield() */
-
 /* TODO:
 	- compiler barf if size_t is not atomic
 	- generic nmath functions so 32-bit size_t case is cared for
@@ -143,7 +141,7 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 #if (NBUF_TECHNIQUE == NBUF_DO_CAS)
 	size_t avail = __atomic_load_n(&from->avail, __ATOMIC_RELAXED);
 	if (avail < size)
-		goto fail;
+		return -1;
 
 	/* Loop on spurious failures or other writes as long as we still have
 		a chance to reserve.
@@ -152,16 +150,16 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 					__ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
 	)) {
 		if (avail < size)
-			goto fail;
+			return -1;
 	}
 
 #elif (NBUF_TECHNIQUE == NBUF_DO_XCH)
 	size_t avail = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
 	if (!avail) {
-		goto fail;
+		return -1;
 	} else if (avail < size) {
 		__atomic_add_fetch(&from->avail, avail, __ATOMIC_RELAXED);
-		goto fail;
+		return -1;
 	} else {
 		/* Only ever ADD back in: otherwise multiple concurrent
 			failures would either lose data or have to CAS-loop.
@@ -190,9 +188,40 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 		**on this side of the buf** - other side may be _multi()!
 	*/
 	return __atomic_fetch_add(&from->pos, size, __ATOMIC_RELAXED);
-fail:
-	sched_yield();
-	return -1;
+#endif
+}
+
+
+/*	nbuf_reserve_single_var()
+Variable reservation size - allows for opportunistic reservation as long
+	as any amount of blocks are available.
+Outputs number of bytes reserved to 'out_size'.
+
+See _reserve_single() above for notes.
+*/
+size_t nbuf_reserve_single_var(const struct nbuf_const	*ct,
+				struct nbuf_sym		*from,
+				size_t			*out_size)
+{
+#if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
+	*out_size = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
+	if (!(*out_size))
+		return -1;
+	return __atomic_fetch_add(&from->pos, *out_size, __ATOMIC_RELAXED);
+
+#elif (NBUF_TECHNIQUE == NBUF_DO_MTX)
+	size_t ret = -1;
+	pthread_mutex_lock(&from->lock);
+		if (from->avail) {
+			ret = from->pos;
+			from->pos += *out_size = from->avail;
+			from->avail = 0;
+		}
+	pthread_mutex_unlock(&from->lock);
+	return ret;
+
+#else
+#error "nbuf technique not implemented"
 #endif
 }
 

@@ -31,17 +31,30 @@ nbuf_test_mtx = executable('nbuf_test_mtx', 'nbuf_test.c',
 			link_with : nbuf_mtx,
 			dependencies : [ deps, thread_dep ],
 			c_args : ['-DNBUF_TECHNIQUE=NBUF_DO_MTX'])
-test('nbuf cas test',
+
+test('nbuf cas fixed',
 	nbuf_test_cas,
-	is_parallel : false,
-	timeout : 1000)
+	args : [ '-r', '32' ],
+	is_parallel : false)
+test('nbuf cas variable',
+	nbuf_test_cas,
+	args : [ '-r', '-1' ],
+	is_parallel : false)
 
-test('nbuf xch test',
+test('nbuf xch fixed',
 	nbuf_test_xch,
-	is_parallel : false,
-	timeout : 1000)
+	args : [ '-r', '32' ],
+	is_parallel : false)
+test('nbuf xch variable',
+	nbuf_test_xch,
+	args : [ '-r', '-1' ],
+	is_parallel : false)
 
-test('nbuf mtx test',
+test('nbuf mtx fixed',
 	nbuf_test_mtx,
-	is_parallel : false,
-	timeout : 2000)
+	args : [ '-r', '32' ],
+	is_parallel : false)
+test('nbuf mtx variable',
+	nbuf_test_mtx,
+	args : [ '-r', '-1' ],
+	is_parallel : false)
