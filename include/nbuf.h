@@ -3,7 +3,7 @@
 
 /* shortlist of advantages:
 	- don't need a memory allocator
-	- symmetric: can send data both ways
+	- symmetric: can send data both ways (same synchronization overhead as one-way)
 	- any block size
 	- multiple blocks per reservation (allows efficient "max possible blocks" scenario)
 	- any combination of single/multiple producer/consumer
@@ -34,16 +34,16 @@ struct nbuf_const {
 	void		*buf;
 	size_t		overflow;	/* Used for quick masking of `pos` variables.
 					It's also `buf_sz -1`, and is used
-						in lieu of a dedicated `buf_sz`
-						variable to keep struct size <=64B.
+						in lieu of a dedicated `buf_sz` variable.
 				       */
-	size_t		blk_sz;		/* Block size is a power of 2 */
-	uint8_t		blk_shift;	/* multiply by blk_sz using a shift */
+	size_t		blk_size;	/* Block size is a power of 2 */
+	uint8_t		blk_shift;	/* Multiply/divide by blk_sz using a shift */
 };
 
 
 /*	nbuf_sym
-a (symmetrical) half of a circular buffer
+One (symmetrical) half of a circular buffer.
+All counts are in BLOCKS, not bytes.
 */
 struct nbuf_sym {
 	size_t		pos;	/* head/tail of buffer */
@@ -93,23 +93,9 @@ Returns the size of one buffer block.
 */
 NLC_INLINE size_t nbuf_blk_sz(const struct nbuf *nb)
 {
-	return nb->ct.blk_sz;
+	return nb->ct.blk_size;
 }
 
-/*	nbuf_blk_div()
-Divide by the size of a block.
-*/
-NLC_INLINE size_t nbuf_blk_div(const struct nbuf *nb, size_t bytes)
-{
-	return bytes >> nb->ct.blk_shift;
-}
-/*	nbuf_blk_mult()
-Multiply by the size of a block.
-*/
-NLC_INLINE size_t nbuf_blk_mult(const struct nbuf *nb, size_t bytes)
-{
-	return bytes << nb->ct.blk_shift;
-}
 
 /*	nbuf_access()
 Access a block inside of a reservation;
@@ -129,8 +115,8 @@ Both are inefficient.
 */
 NLC_INLINE void *nbuf_access(size_t pos, size_t i, const struct nbuf *nb)
 {
-	pos += i << nb->ct.blk_shift;
-	return nb->ct.buf + (pos & nb->ct.overflow);
+	size_t offt = (pos + i) << nb->ct.blk_shift;
+	return nb->ct.buf + (offt & nb->ct.overflow);
 }
 
 /*	NBUF_DEREF()
@@ -142,7 +128,7 @@ It's main purpose is to avoid giving library users cancer when accessing
 #define NBUF_DEREF(type, pos, i, nb) (*((type*)nbuf_access(pos, i, nb)))
 
 
-int	nbuf_params(		size_t		blk_sz,
+int	nbuf_params(		size_t		blk_size,
 				size_t		blk_cnt,
 				struct nbuf	*out);
 
@@ -152,21 +138,16 @@ int	nbuf_init(		struct nbuf	*nb,
 void	nbuf_deinit(		struct nbuf	*nb);
 
 
-size_t __attribute__((const))
-	nbuf_reservation_size(const struct nbuf		*nb,
-				size_t			blk_cnt);
-
-/* TODO: function to reserve as many blocks as possible */
-
 size_t	nbuf_reserve_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
-				size_t			size);
+				size_t			*out_pos,
+				size_t			count);
 size_t nbuf_reserve_single_var(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
-				size_t			*out_size);
+				size_t			*out_pos);
 
-int	nbuf_release_single(const struct nbuf_const	*ct,
+void	nbuf_release_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*to,
-				size_t			size);
+				size_t			count);
 
 #endif /* nbuf_h_ */

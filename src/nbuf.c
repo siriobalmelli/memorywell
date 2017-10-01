@@ -21,29 +21,28 @@ Call nbuf_blk_sz() on '*out' to get individual block size
 
 returns 0 on success
 */
-int nbuf_params(size_t blk_sz, size_t blk_cnt, struct nbuf *out)
+int nbuf_params(size_t blk_size, size_t blk_cnt, struct nbuf *out)
 {
 	int err_cnt = 0;
 
-	/* block sizes are a power of 2 */
-	out->ct.blk_sz = 0;
 	/* should go away by the time compiler is through with it :P */
-	out->ct.blk_sz = nm_next_pow2_64(blk_sz);
-	Z_die_if(out->ct.blk_sz < blk_sz, "blk_sz %zu overflow", blk_sz);
+	out->ct.blk_size = nm_next_pow2_64(blk_size);
+	Z_die_if(out->ct.blk_size < blk_size, "blk_size %zu overflow", blk_size);
 	/* left-shift when multiplying by block size */
-	out->ct.blk_shift = nm_bit_pos(out->ct.blk_sz) -1;
+	out->ct.blk_shift = nm_bit_pos(out->ct.blk_size) -1;
 
-	/* final size is not abortive */
 	size_t size;
-	Z_die_if(__builtin_mul_overflow(out->ct.blk_sz, blk_cnt, &size),
+	/* final size is not abortive */
+	Z_die_if(__builtin_mul_overflow(out->ct.blk_size, blk_cnt, &size),
 		"%zu many %zu-sized blocks overflows",
-		out->ct.blk_sz, blk_cnt);
+		out->ct.blk_size, blk_cnt);
+	/* final size must be a power of 2 */
 	out->ct.overflow = nm_next_pow2_64(size);
 	Z_die_if(out->ct.overflow < size, "buffer size %zu overflow", size);
 
-	/* mark available slots-count */
-	out->tx.avail = out->ct.overflow / out->ct.blk_sz;
-	/* derive a bitmask from size */
+	/* mark available block-count */
+	out->tx.avail = out->ct.overflow >> out->ct.blk_shift;
+	/* turn size into a bitmask */
 	out->ct.overflow--;
 
 out:
@@ -92,45 +91,21 @@ out:
 }
 
 
-/*	nbuf_reservation_size()
-Compute a sane "reservation size" to pass to _reserve() or _release()
-	functions.
-Reservation size is always a multiple of 'blk_cnt'.
-
-This function exists because caller usually knows reservation size before
-	looping through *many* reservations; makes sense to do this compute
-	only once, and allows us to be more pedantic in checking for errors.
-*/
-size_t __attribute__((const))
-	nbuf_reservation_size(const struct nbuf	*nb, size_t blk_cnt)
-{
-	size_t size;
-	if (__builtin_mul_overflow(blk_cnt, nb->ct.blk_sz, &size))
-		return 0;
-	if (size > nb->ct.overflow +1)
-		return 0;
-	return size;
-}
-
-
 /*	nbuf_reserve_single()
 A single producer/consumer reserves a buffer block.
 
-Returns an opaque 'pos' value which much be properly dereferenced
-	in order to obviate problems looping around the end of the buffer.
+Returns 0 on failure.
+Otherwise, returns number of slots reserved, and outputs an opaque
+	"position" variable into '*out_pos'.
+Use _access() with '*out_pos' to obtain valid pointers.
 
-Return -1 on failure: -1 is an ODD number and our blocks are size pow(2),
-	and aligned at offset 0; so always EVEN.
-
-NOTE: 'size' is in BYTES (not "blocks") and we do NOT sanity-check 'size':
-	- insanely large values will fail
-	- values not a multiple of blk_sz will irrevocably
-		screw the entire buffer
-THEREFORE: ALWAYS obtain size by calling nbuf_reservation_size();
+NOTE: there is no sanity check on 'count'; it should be less than the
+	blocks in the buffer.
 */
 size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
-				size_t			size)
+				size_t			*out_pos,
+				size_t			count)
 {
 	/*	critical section
 
@@ -140,40 +115,57 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 	*/
 #if (NBUF_TECHNIQUE == NBUF_DO_CAS)
 	size_t avail = __atomic_load_n(&from->avail, __ATOMIC_RELAXED);
-	if (avail < size)
-		return -1;
+	if (avail < count)
+		return 0;
 
 	/* Loop on spurious failures or other writes as long as we still have
 		a chance to reserve.
 	*/
-	while (!(__atomic_compare_exchange_n(&from->avail, &avail, avail-size, 1,
+	while (!(__atomic_compare_exchange_n(&from->avail, &avail, avail-count, 1,
 					__ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
 	)) {
-		if (avail < size)
-			return -1;
+		if (avail < count)
+			return 0;
 	}
+	/* post-critical: we've synchronized availability
+		and don't contend for position since we're _single()
+		**on this side of the buf** - other side may be _multi()!
+	*/
+	*out_pos = __atomic_fetch_add(&from->pos, count, __ATOMIC_RELAXED);
+	return count;
+
 
 #elif (NBUF_TECHNIQUE == NBUF_DO_XCH)
 	size_t avail = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
+	/* no slots available */
 	if (!avail) {
-		return -1;
-	} else if (avail < size) {
-		__atomic_add_fetch(&from->avail, avail, __ATOMIC_RELAXED);
-		return -1;
-	} else {
+		return 0;
+
+	/* too few slots available */
+	} else if (avail < count) {
 		/* Only ever ADD back in: otherwise multiple concurrent
 			failures would either lose data or have to CAS-loop.
 		*/
-		__atomic_add_fetch(&from->avail, avail-size, __ATOMIC_RELAXED);
-	};
+		__atomic_add_fetch(&from->avail, avail, __ATOMIC_RELAXED);
+		return 0;
+
+	/* too many slots available */
+	} else if (avail > count) {
+		__atomic_add_fetch(&from->avail, avail-count, __ATOMIC_RELAXED);
+	}
+	/* just right: goldilocks gets her slots */
+	*out_pos = __atomic_fetch_add(&from->pos, count, __ATOMIC_RELAXED);
+	return count;
+
 
 #elif (NBUF_TECHNIQUE == NBUF_DO_MTX)
-	size_t ret = -1;
+	size_t ret = 0;
 	pthread_mutex_lock(&from->lock);
-		if (from->avail >= size) {
-			from->avail -= size;
-			ret = from->pos;
-			from->pos += size;
+		if (from->avail >= count) {
+			from->avail -= count;
+			*out_pos = from->pos;
+			from->pos += count;
+			ret = count;
 		}
 	pthread_mutex_unlock(&from->lock);
 	return ret;
@@ -181,44 +173,37 @@ size_t nbuf_reserve_single(const struct nbuf_const	*ct,
 #else
 #error "nbuf technique not implemented"
 #endif
-
-#if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
-	/* post-critical: we've synchronized availability
-		and don't contend for position since we're _single()
-		**on this side of the buf** - other side may be _multi()!
-	*/
-	return __atomic_fetch_add(&from->pos, size, __ATOMIC_RELAXED);
-#endif
 }
 
 
 /*	nbuf_reserve_single_var()
 Variable reservation size - allows for opportunistic reservation as long
 	as any amount of blocks are available.
-Outputs number of bytes reserved to 'out_size'.
+Outputs number of blocks reserved to 'out_size'.
 
 See _reserve_single() above for notes.
 */
 size_t nbuf_reserve_single_var(const struct nbuf_const	*ct,
 				struct nbuf_sym		*from,
-				size_t			*out_size)
+				size_t			*out_pos)
 {
 #if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
-	*out_size = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
-	if (!(*out_size))
-		return -1;
-	return __atomic_fetch_add(&from->pos, *out_size, __ATOMIC_RELAXED);
+	size_t count = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
+	if (!count)
+		return 0;
+	*out_pos = __atomic_fetch_add(&from->pos, count, __ATOMIC_RELAXED);
+	return count;
 
 #elif (NBUF_TECHNIQUE == NBUF_DO_MTX)
-	size_t ret = -1;
+	size_t count = 0;
 	pthread_mutex_lock(&from->lock);
 		if (from->avail) {
-			ret = from->pos;
-			from->pos += *out_size = from->avail;
+			*out_pos = from->pos;
+			from->pos += count = from->avail;
 			from->avail = 0;
 		}
 	pthread_mutex_unlock(&from->lock);
-	return ret;
+	return count;
 
 #else
 #error "nbuf technique not implemented"
@@ -228,23 +213,20 @@ size_t nbuf_reserve_single_var(const struct nbuf_const	*ct,
 
 /*	nbuf_release_single()
 Reciprocal of nbuf_reserve_single() above; see it's header blurb for notes.
-Return 0 on success
 */
-int nbuf_release_single(const struct nbuf_const	*ct,
+void nbuf_release_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*to,
-				size_t			size)
+				size_t			count)
 {
 #if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
-	__atomic_add_fetch(&to->avail, size, __ATOMIC_RELEASE);
+	__atomic_add_fetch(&to->avail, count, __ATOMIC_RELEASE);
 
 #elif (NBUF_TECHNIQUE == NBUF_DO_MTX)
 	pthread_mutex_lock(&to->lock);
-		to->avail += size;
+		to->avail += count;
 	pthread_mutex_unlock(&to->lock);
 
 #else
 #error "nbuf technique not implemented"
 #endif
-
-	return 0;
 }

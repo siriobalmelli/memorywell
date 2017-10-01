@@ -38,7 +38,7 @@ test('nbuf cas fixed',
 	is_parallel : false)
 test('nbuf cas variable',
 	nbuf_test_cas,
-	args : [ '-r', '-1' ],
+	args : [ '-r', '32', '-e' ],
 	is_parallel : false)
 
 test('nbuf xch fixed',
@@ -47,7 +47,7 @@ test('nbuf xch fixed',
 	is_parallel : false)
 test('nbuf xch variable',
 	nbuf_test_xch,
-	args : [ '-r', '-1' ],
+	args : [ '-r', '32', '-e' ],
 	is_parallel : false)
 
 test('nbuf mtx fixed',
@@ -56,5 +56,5 @@ test('nbuf mtx fixed',
 	is_parallel : false)
 test('nbuf mtx variable',
 	nbuf_test_mtx,
-	args : [ '-r', '-1' ],
+	args : [ '-r', '32', '-e' ],
 	is_parallel : false)

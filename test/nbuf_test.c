@@ -12,104 +12,87 @@ static size_t blk_size = 8; /* in Bytes */
 static size_t reservation = 1; /* how many blocks to reserve at once */
 
 
-/* TODO: yield to a specific thread (eventing) instead of general yield() ? */
+/* TODO:
+	- yield to a specific thread (eventing) instead of general yield()?
+	- validate reserve and release with '0' size.
+*/
+
 
 /*	tx_fixed()
 TX with a fixed reservation size.
 */
-void* tx_fixed(void* arg)
+void *tx_fixed(void* arg)
 {
 	struct nbuf *nb = arg;
 	size_t tally = 0;
 
-	size_t res_sz = nbuf_reservation_size(nb, reservation);
-	Z_die_if(!res_sz, "reservation count %zu is broken", reservation);
-
 	/* loop on TX */
 	for (size_t i=0; i < numiter; i += reservation) {
 		size_t pos;
-		while ((pos = nbuf_reserve_single(&nb->ct, &nb->tx, res_sz)) == -1)
+		while ((nbuf_reserve_single(&nb->ct, &nb->tx, &pos, reservation)) != reservation)
 			sched_yield(); /* no scheduling decisions taken by nbuf */
 		for (size_t j=0; j < reservation; j++)
 			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
-		Z_die_if(nbuf_release_single(&nb->ct, &nb->rx, res_sz), "");
+		nbuf_release_single(&nb->ct, &nb->rx, reservation);
 	}
 
-out:
 	return (void *)tally;
 }
+
 /*	rx_fixed()
 */
-void* rx_fixed(void* arg)
+void *rx_fixed(void* arg)
 {
 	struct nbuf *nb = arg;
 	size_t tally = 0;
-
-	size_t res_sz = nbuf_reservation_size(nb, reservation);
-	Z_die_if(!res_sz, "reservation count %zu is broken", reservation);
+	size_t seq_errs = 0; /* enforce that buffer is sequential */
 
 	/* loop on RX */
 	for (size_t i=0; i < numiter; i += reservation) {
 		size_t pos;
-		while ((pos = nbuf_reserve_single(&nb->ct, &nb->rx, res_sz)) == -1)
+		while ((nbuf_reserve_single(&nb->ct, &nb->rx, &pos, reservation)) != reservation)
 			sched_yield(); /* no scheduling decisions taken by nbuf */
-		for (size_t j=0; j < reservation; j++)
-			tally += NBUF_DEREF(size_t, pos, j, nb);
-		Z_die_if(nbuf_release_single(&nb->ct, &nb->tx, res_sz), "");
+		for (size_t j=0; j < reservation; j++) {
+			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
+			tally += temp;
+			/* Buffer should be sequential: it was written to
+				in the same order it is being read from.
+			*/
+			seq_errs += (temp != i + j);
+		}
+		nbuf_release_single(&nb->ct, &nb->tx, reservation);
 	}
+	/* error if sequential consistency was violated */
+	Z_err_if(seq_errs, "%zu violations of sequential consistency", seq_errs);
 
-out:
 	return (void *)tally;
 }
 
-
-/*	tx_variable()
-TX with a variable/opportunistic reservation size.
-*/
-void* tx_variable(void* arg)
-{
-	struct nbuf *nb = arg;
-	size_t tally = 0;
-
-	/* loop on TX */
-	for (size_t i=0, res_sz; i < numiter; i += res_sz) {
-		/* reserve a variable amount of bytes */
-		size_t pos;
-		while ((pos = nbuf_reserve_single_var(&nb->ct, &nb->tx, &res_sz)) == -1)
-			sched_yield(); /* no scheduling decisions taken by nbuf */
-
-		/* turn a bytecount into a block-count; loop through each block */
-		size_t reservation = nbuf_blk_div(nb, res_sz);
-		for (size_t j=0; j < reservation; j++)
-			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
-
-		Z_die_if(nbuf_release_single(&nb->ct, &nb->rx, res_sz), "");
-	}
-
-out:
-	return (void *)tally;
-}
 /*	rx_variable()
 */
-void* rx_variable(void* arg)
+void *rx_variable(void* arg)
 {
 	struct nbuf *nb = arg;
 	size_t tally = 0;
+	size_t seq_errs = 0; /* enforce that buffer is sequential */
 
 	/* loop on RX */
-	for (size_t i=0, res_sz; i < numiter; i += res_sz) {
+	for (size_t i=0, reservation; i < numiter; i += reservation) {
 		size_t pos;
-		while ((pos = nbuf_reserve_single_var(&nb->ct, &nb->rx, &res_sz)) == -1)
+		while (!(reservation = nbuf_reserve_single_var(&nb->ct, &nb->rx, &pos)))
 			sched_yield(); /* no scheduling decisions taken by nbuf */
 
-		size_t reservation = nbuf_blk_div(nb, res_sz);
-		for (size_t j=0; j < reservation; j++)
-			tally += NBUF_DEREF(size_t, pos, j, nb);
+		for (size_t j=0; j < reservation; j++) {
+			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
+			tally += temp;
+			seq_errs += (temp != i + j);
+		}
 
-		Z_die_if(nbuf_release_single(&nb->ct, &nb->tx, res_sz), "");
+		nbuf_release_single(&nb->ct, &nb->tx, reservation);
 	}
+	/* error if sequential consistency was violated */
+	Z_err_if(seq_errs, "%zu violations of sequential consistency", seq_errs);
 
-out:
 	return (void *)tally;
 }
 
@@ -127,7 +110,8 @@ Options:\n\
 -c, --count <blk_count>	:	How many blocks in the circular buffer.\n\
 -s, --size <blk_size>	:	Size of each block (bytes).\n\
 -r, --reservation <res>	:	(Attempt to) reserve <res> blocks at once.\n\
-				The special value '-1' means \"variable reservation\".\n",
+-e, --variable		:	RX (consumer) uses variable reservation size.\n\
+-h, --help		:	Print this message and exit.\n",
 		pgm_name);
 }
 
@@ -136,7 +120,10 @@ Options:\n\
 */
 int main(int argc, char **argv)
 {
+	/* Use global error count so that threads can error
+		and directly affect the return code of main()
 	int err_cnt = 0;
+	*/
 
 
 	/*
@@ -148,10 +135,14 @@ int main(int argc, char **argv)
 		{ "size",	required_argument,	0,	's'},
 		{ "count",	required_argument,	0,	'c'},
 		{ "reservation",required_argument,	0,	'r'},
+		{ "variable",	no_argument,		0,	'e'},
 		{ "help",	no_argument,		0,	'h'}
 	};
 
-	while ((opt = getopt_long(argc, argv, "n:s:c:r:", long_options, NULL)) != -1) {
+	/* fixed- or variable-reservation RX thread */
+	void *(*rx_thread)(void *) = rx_fixed;
+
+	while ((opt = getopt_long(argc, argv, "n:s:c:r:eh", long_options, NULL)) != -1) {
 		switch(opt)
 		{
 			case 'n':
@@ -176,9 +167,12 @@ int main(int argc, char **argv)
 			case 'r':
 				opt = sscanf(optarg, "%zu", &reservation);
 				Z_die_if(opt != 1, "invalid reservation '%s'", optarg);
-				/* -1 means "variable reservation" */
-				Z_die_if(!reservation || (reservation > blk_cnt && reservation != -1),
+				Z_die_if(!reservation || reservation > blk_cnt,
 					"reservation %zu; blk_cnt %zu", reservation, blk_cnt);
+				break;
+
+			case 'e':
+				rx_thread = rx_variable;
 				break;
 
 			case 'h':
@@ -190,6 +184,10 @@ int main(int argc, char **argv)
 				Z_die("option '%c' invalid", opt);
 		}
 	}
+	/* sanity check reservation size */
+	Z_die_if(numiter != nm_next_mult64(numiter, reservation),
+		"numiter %zu doesn't evenly divide into %zu reservation blocks",
+		numiter, reservation);
 
 
 	/* create buffer */
@@ -204,14 +202,8 @@ int main(int argc, char **argv)
 	nlc_timing_start(t);
 		/* fire reader-writer threads */
 		pthread_t tx, rx;
-		if (reservation != -1) {
-			pthread_create(&tx, NULL, rx_fixed, &nb);
-			pthread_create(&rx, NULL, tx_fixed, &nb);
-		} else {
-			reservation = 0;
-			pthread_create(&tx, NULL, rx_variable, &nb);
-			pthread_create(&rx, NULL, tx_variable, &nb);
-		}
+		pthread_create(&tx, NULL, tx_fixed, &nb);
+		pthread_create(&rx, NULL, rx_thread, &nb);
 
 		/* wait for threads to finish */
 		size_t tx_i_sum = 0, rx_i_sum = 0;
@@ -221,8 +213,29 @@ int main(int argc, char **argv)
 
 	/* verify sums */
 	Z_die_if(tx_i_sum != rx_i_sum, "%zu != %zu", tx_i_sum, rx_i_sum);
-	printf("numiter %zu; blk_size %zu; blk_count %zu; reservation %zu; %.4lfs cputime\n",
-		numiter, blk_size, blk_cnt, reservation, nlc_timing_secs(t));
+	/* This is the expected sum of all 'i' loop iterators for all threads
+		The logic to arrive at this was:
+			@1 : i = 0		0/1 = 0
+			@2 : i = 0+1		2/1 = 0.5
+			@3 : i = 0+1+2		3/3 = 1
+			@4 : i = 0+1+2+3	6/4 = 1.5
+			@5 : i = 0+1+2+3+4	10/5 = 2
+			...
+			@8 : i = 0+1+2+3+4+5+6+7	28/8	= 3.5
+			@8 : (8-1)*0.5				= 3.5
+			@8 : 0+1+2+3+4+5+6+7 = (8-1)*0.5*8 = 28
+	*/
+	size_t verif_i_sum = (numiter -1) * 0.5 * numiter;
+	Z_die_if(verif_i_sum != tx_i_sum, "%zu != %zu", verif_i_sum, tx_i_sum);
+
+	/* print stats */
+	printf("numiter %zu; blk_size %zu; blk_count %zu; reservation %zu\n",
+		numiter, blk_size, blk_cnt, reservation);
+	if (rx_thread == rx_fixed)
+		printf("TX/RX reservation %zu\n", reservation);
+	else
+		printf("TX reservation %zu, RX variable\n", reservation);
+	printf("cpu time: %.4lfs\n", nlc_timing_secs(t));
 
 out:
 	free(nb.ct.buf);
