@@ -70,13 +70,19 @@ circular buffer with proper alignment
 struct nbuf {
 	/* cache line 1: all the unchanging stuff that should NEVER be invalidated */
 	struct nbuf_const	ct;
+#if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH) /* Because mutex is big on some unices */
 	unsigned char		pad_ln1[CACHE_LINE - sizeof(struct nbuf_const)];
+#endif
 	/* cache line 2: tx side */
 	struct nbuf_sym		tx;
+#if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
 	unsigned char		pad_ln2[CACHE_LINE - sizeof(struct nbuf_sym)];
+#endif
 	/* cache line 3: rx side */
 	struct nbuf_sym		rx;
+#if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
 	unsigned char		pad_ln3[CACHE_LINE - sizeof(struct nbuf_sym)];
+#endif
 };
 
 

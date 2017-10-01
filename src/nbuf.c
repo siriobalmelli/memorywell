@@ -6,6 +6,8 @@
 	- compiler barf if size_t is not atomic
 	- generic nmath functions so 32-bit size_t case is cared for
 	- speed differential if combining cache lines
+	- warnings on BSD
+	- mutex runs forever on BSD
 */
 
 
