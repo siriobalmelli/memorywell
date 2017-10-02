@@ -3,14 +3,34 @@ lib_files =  [ 'nbuf.c']
 # zcio.c
 
 
+nbuf_shared = shared_library(meson.project_name(),
+			lib_files,
+			include_directories : inc,
+			install : true,
+			dependencies : deps)
+nbuf_static = static_library(meson.project_name(),
+			lib_files,
+			include_directories : inc,
+			install : false,
+			dependencies : deps)
+
+# TODO: fix namiiiiing
+if meson.is_subproject()
+	cbuf = nbuf_static
+	cbuf_dep = declare_dependency(link_with : nonlibc,
+					include_directories : inc)
+else
+	cbuf = nbuf_shared
+endif
+
 # We are being build stand-alone,
 #+	so we build shared and generate a pkg-config file.
 if not meson.is_subproject()
-	cbuf = shared_library(meson.project_name(),
-				lib_files,
-				include_directories : inc,
-				install : true,
-				dependencies : deps)
+#	cbuf = shared_library(meson.project_name(),
+#				lib_files,
+#				include_directories : inc,
+#				install : true,
+#				dependencies : deps)
 
 	nbuf_cas = shared_library('nbuf_cas',
 				lib_files,
@@ -34,12 +54,13 @@ if not meson.is_subproject()
 				c_args : ['-DNBUF_TECHNIQUE=NBUF_DO_MTX'])
 
 	# don't set anything here, rely on variables declared in toplevel file
-	pkg = import('pkgconfig')
-	pkg.generate(libraries : cbuf,
-			name : meson.project_name(),
-			version : meson.project_version(),
-			filebase : meson.project_name(),
-			description : description)
+#	pkg = import('pkgconfig')
+#	pkg.generate(libraries : cbuf,
+#			name : meson.project_name(),
+#			version : meson.project_version(),
+#			filebase : meson.project_name(),
+#			description : description)
+
 
 # Assume that we export (as a subproject) ONLY a static dependency;
 #+	on the rationale that otherwise this library should be compiled and installed
@@ -49,10 +70,10 @@ if not meson.is_subproject()
 #+	when it runs `sudo ninja install`; which is probably not the intended
 #	behavior.
 else
-	cbuf = static_library(meson.project_name(),
-				lib_files,
-				include_directories : inc,
-				install : false)
-	cbuf_dep = declare_dependency(link_with : nonlibc,
-					include_directories : inc)
+#	cbuf = static_library(meson.project_name(),
+#				lib_files,
+#				include_directories : inc,
+#				install : false)
+#	cbuf_dep = declare_dependency(link_with : nonlibc,
+#					include_directories : inc)
 endif

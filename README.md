@@ -16,6 +16,6 @@ Cons:
 ## TODO
 
 - give it a name
-- BSD compilation
+- figure out best static vs. dynamic link setup (nonlibc also)
 - generic nmath functions so 32-bit size_t case is cared for
 - speed differential if combining cache lines (avoid false sharing)?
