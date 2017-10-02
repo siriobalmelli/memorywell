@@ -2,13 +2,11 @@
 #include <nbuf.h>
 #include <nmath.h>
 
-/* TODO:
-	- compiler barf if size_t is not atomic
-	- generic nmath functions so 32-bit size_t case is cared for
-	- speed differential if combining cache lines
-	- warnings on BSD
-	- mutex runs forever on BSD
+/*
+	compile-time sanity
 */
+NLC_ASSERT(size_t_is_pointer, sizeof(size_t) == sizeof(void *));
+NLC_ASSERT(size_t_is_atomic, __atomic_always_lock_free(sizeof(size_t), 0) == 1);
 
 
 /*	nbuf_params()

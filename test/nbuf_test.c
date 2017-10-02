@@ -238,6 +238,7 @@ int main(int argc, char **argv)
 	printf("cpu time: %.4lfs\n", nlc_timing_secs(t));
 
 out:
+	nbuf_deinit(&nb);
 	free(nb.ct.buf);
 	return err_cnt;
 }

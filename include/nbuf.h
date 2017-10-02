@@ -1,14 +1,6 @@
 #ifndef nbuf_h_
 #define nbuf_h_
 
-/* shortlist of advantages:
-	- don't need a memory allocator
-	- symmetric: can send data both ways (same synchronization overhead as one-way)
-	- any block size
-	- multiple blocks per reservation (allows efficient "max possible blocks" scenario)
-	- any combination of single/multiple producer/consumer
-	- fast (split cache lines)
-*/
 
 #include <stddef.h>
 #include <stdint.h>
@@ -16,6 +8,7 @@
 #include <pthread.h>
 
 #include "config.h"
+
 
 /* in theoretical order of performance */
 #ifndef NBUF_TECHNIQUE
