@@ -19,3 +19,4 @@ Cons:
 - figure out best static vs. dynamic link setup (nonlibc also)
 - generic nmath functions so 32-bit size_t case is cared for
 - speed differential if combining cache lines (avoid false sharing)?
+- no safety checking or locking on init/deinit; unsure of the best approach here

@@ -33,7 +33,7 @@ foreach t : tests
 endforeach
 
 
-techniques = [ 'NBUF_DO_CAS', 'NBUF_DO_XCH', 'NBUF_DO_MTX' ]
+techniques = [ 'NBUF_DO_CAS', 'NBUF_DO_XCH', 'NBUF_DO_MTX', 'NBUF_DO_SPL' ]
 
 foreach t : techniques
   a_test = executable(t, [ 'nbuf_test.c', '../src/nbuf.c' ],
