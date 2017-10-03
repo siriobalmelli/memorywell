@@ -20,15 +20,14 @@ def current_commit():
 
 
 import re
-#rex = re.compile('.*blk_size ([0-9]+); blk_count ([0-9]+); reservation ([0-9]+)', re.DOTALL)
 rex = re.compile('.*cpu time: ([0-9]+).([0-9]+)s', re.DOTALL)
 
 executables = ['build-debug/test/nbuf_test_cas', 
                'build-debug/test/nbuf_test_xch', 
                'build-debug/test/nbuf_test_mtx']
 
-def run_single(test_exc, block_count, block_size, reservation):
-    '''run nbuf_test_cas once with 'block_size','block_count' and 'reservation'
+def run_single(test_exc, block_size, reservation):
+    '''run nbuf_test_cas once with 'block_size' and 'reservation'
 
     returns:
            'numiter 100000000; blk_size 16; blk_count 8; reservation 4
@@ -37,7 +36,7 @@ def run_single(test_exc, block_count, block_size, reservation):
     ''' 
     try:
 	    #TODO: This is hardcoded. That is bad.
-	    sub = subprocess.run([test_exc, "-c {}".format(block_count), "-s {}".format(block_size), "-r {}".format(reservation)],
+	    sub = subprocess.run([test_exc, "-s {}".format(block_size), "-r {}".format(reservation)],
 		                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              shell=False, check=True);
     except subprocess.CalledProcessError as err:
@@ -49,8 +48,7 @@ def run_single(test_exc, block_count, block_size, reservation):
     res = rex.match(sub.stdout.decode('ascii'))
     try:
         return "{0}.{1}".format(res.group(1), res.group(2))
-    except Exception as e:
-        print(e)
+    except:
         print("regex didn't match!")
         print(sub.stdout.decode('ascii'))
         exit (1)
@@ -64,14 +62,50 @@ def human_format():
 
 import numpy as np 
 
-def run_multiple(block_count, block_size, reservation):
-	# powers of two block count
-    for bc in (2**p for p in range(2, block_count)):
-        for bs in (2**p for p in range(3, int(log(block_size,2)))):
-            print("running with block_count {0}, block_size {1}".format(bc, bs))
-            cpu_time = run_single(executables[0], bc, bs, 1)
-            print("cpu time: {0}".format(cpu_time))
+#block_size / reservation and cpu_time
+#block_size / reservation and cpu_time with -e flag
 
+cpu_times = {}
+def run_multiple(block_size, reservation):
+	# NOTE: How to decide on reservations???
+	for exe in executables:
+		for bs in (2**p for p in range(3, int(log(block_size,2)))):
+		    cpu_times[bs] = run_single(exe, bs, 1)
+		    print("cpu time: {0}".format(cpu_times[bs]))
+
+
+def gen_benchmark():
+    '''actually run the benchmark.
+    Return a dictionary of results.
+    '''
+    ret = {}
+
+    ret['commit-id'] = current_commit()
+
+    # block_size comes in powers of two starting at 8, until what size??? 
+    ret['X_block_size'] = [ 2**j for j in range(3, 8) ]
+	# NOTE: decide on the range of reservations??? 
+    ret['symbol_sz'] = 1280
+    ret['Y_reservation'] = [ 2**sz_exp * ret['symbol_sz']
+                for sz_exp in range(8, 21) ] #21
+
+    # Generate mesh of graphing coordinates against which
+    #+  to run tests (so they execute in the right order!)
+    X, Y = np.meshgrid(ret['X_ratio'], ret['Y_size'])
+
+    # execute the runs
+    # NOTE: don't use a list comprehension: avoid map(list, zip())
+    #+  and more explicitly show loop nesting (important when making a mesh to plot, later)
+
+	# NOTE: This generates our Z axis. Here we run our tests to generate our
+	#+ cpu_times.
+    ret['Z_inef'], ret['Z_enc'], ret['Z_dec'] = map(list,zip(*[ 
+                            run_average(fec_ratio = X[i][j], block_size = Y[i][j])
+                                for i in range(len(X)) 
+                                for j in range(len(X[0])) 
+                            ]))
+
+    return ret
 
 from math import log
 # Do not use Xwindows;
