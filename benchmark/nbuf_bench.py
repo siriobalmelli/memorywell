@@ -22,9 +22,9 @@ def current_commit():
 import re
 rex = re.compile('.*cpu time: ([0-9]+).([0-9]+)s', re.DOTALL)
 
-executables = ['build-debug/test/nbuf_test_cas', 
-               'build-debug/test/nbuf_test_xch', 
-               'build-debug/test/nbuf_test_mtx']
+executables = ['build/test/NBUF_DO_CAS', 
+               'build/test/NBUF_DO_XCH',
+               'build/test/NBUF_DO_MTX']
 
 def run_single(test_exc, block_size, reservation):
     '''run nbuf_test_cas once with 'block_size' and 'reservation'
@@ -69,9 +69,10 @@ cpu_times = {}
 def run_multiple(block_size, reservation):
 	# NOTE: How to decide on reservations???
 	for exe in executables:
-		for bs in (2**p for p in range(3, int(log(block_size,2)))):
-		    cpu_times[bs] = run_single(exe, bs, 1)
-		    print("cpu time: {0}".format(cpu_times[bs]))
+		for res in (2**r for r in range(1, reservation)): #reservations
+		    for bs in (2**p for p in range(3, int(log(block_size,2)))): #block_size
+		        cpu_times[bs] = run_single(exe, bs, res)
+		        print("cpu time: {0}".format(cpu_times[bs]))
 
 
 def gen_benchmark():
@@ -85,13 +86,12 @@ def gen_benchmark():
     # block_size comes in powers of two starting at 8, until what size??? 
     ret['X_block_size'] = [ 2**j for j in range(3, 8) ]
 	# NOTE: decide on the range of reservations??? 
-    ret['symbol_sz'] = 1280
-    ret['Y_reservation'] = [ 2**sz_exp * ret['symbol_sz']
-                for sz_exp in range(8, 21) ] #21
+    ret['Y_reservation'] = [ 2**sz_exp 
+                for sz_exp in range(1, 8) ] 
 
     # Generate mesh of graphing coordinates against which
     #+  to run tests (so they execute in the right order!)
-    X, Y = np.meshgrid(ret['X_ratio'], ret['Y_size'])
+    X, Y = np.meshgrid(ret['X_block_size'], ret['Y_reservation'])
 
     # execute the runs
     # NOTE: don't use a list comprehension: avoid map(list, zip())
@@ -100,7 +100,7 @@ def gen_benchmark():
 	# NOTE: This generates our Z axis. Here we run our tests to generate our
 	#+ cpu_times.
     ret['Z_inef'], ret['Z_enc'], ret['Z_dec'] = map(list,zip(*[ 
-                            run_average(fec_ratio = X[i][j], block_size = Y[i][j])
+                            run_multiple(block_size = X[i][j], reservation = Y[i][j])
                                 for i in range(len(X)) 
                                 for j in range(len(X[0])) 
                             ]))
@@ -116,9 +116,9 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 def make_plots(bm):
-    lin_x = bm['X_ratio'] # for legibility only
-    log_y = [ log(y, 2) for y in bm['Y_size'] ]
-    tick_y = [ human_format(y) for y in bm['Y_size'] ] # used for labels
+    lin_x = bm['X_block_size'] # for legibility only
+    log_y = [ log(y, 2) for y in bm['Y_reservation'] ]
+    tick_y = [ human_format(y) for y in bm['Y_reservation'] ] # used for labels
     X, Y = np.meshgrid(lin_x, log_y)
 
     # Repeat plotting work for the following:
@@ -169,10 +169,8 @@ def make_plots(bm):
 
 def main():
 #	run_single(executables[1], 4, 256, 2)
-    run_multiple(8, 256, 1)
+    run_multiple(256, 8)
 
 
 if __name__ == '__main__':
 	main()
-
-
