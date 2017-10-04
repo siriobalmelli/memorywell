@@ -33,17 +33,23 @@ foreach t : tests
 endforeach
 
 
-techniques = [ 'NBUF_DO_CAS', 'NBUF_DO_XCH', 'NBUF_DO_MTX', 'NBUF_DO_SPL' ]
+techniques = [ 'NBUF_DO_XCH', 'NBUF_DO_MTX', 'NBUF_DO_SPL' ]
 
 foreach t : techniques
   a_test = executable(t, [ 'nbuf_test.c', '../src/nbuf.c' ],
 		      include_directories : inc,
 		      dependencies : [ deps, thread_dep ],
 		      c_args : ['-DNBUF_TECHNIQUE=' + t])
-  test(t + ' fixed', a_test,
+  test(t + '; 1 -> 1', a_test,
 	args : [ '-r', '64' ],
 	is_parallel : false)
-  test(t + ' variable', a_test,
-	args : [ '-r', '64', '-e' ],
+  test(t + '; 2 -> 1', a_test,
+	args : [ '-r', '64', '-t', '2' ],
+	is_parallel : false)
+  test(t + '; 1 -> 2', a_test,
+	args : [ '-r', '64', '-x', '2' ],
+	is_parallel : false)
+  test(t + '; 2 -> 2', a_test,
+	args : [ '-r', '64', '-t', '2', '-x', '2' ],
 	is_parallel : false)
 endforeach

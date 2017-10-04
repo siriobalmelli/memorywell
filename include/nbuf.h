@@ -18,7 +18,7 @@ struct nbuf_const {
 	size_t		overflow;	/* Used for quick masking of `pos` variables.
 					It's also `buf_sz -1`, and is used
 						in lieu of a dedicated `buf_sz` variable.
-				       */
+					*/
 	size_t		blk_size;	/* Block size is a power of 2 */
 	uint8_t		blk_shift;	/* Multiply/divide by blk_sz using a shift */
 };
@@ -32,14 +32,22 @@ struct nbuf_sym {
 	size_t		pos;	/* head/tail of buffer */
 	size_t		avail;	/* can be reserved */
 
+	/*
+		multi-read or multi-write contention
+	*/
+	size_t		release_pos;	/* pos of earliest release */
+	size_t		uncommitted;	/* "released" out-of-order,
+						waiting for earlier reservation
+						to be released.
+					*/
+	/*
+		locking
+	*/
 #if (NBUF_TECHNIQUE == NBUF_DO_MTX)
 	pthread_mutex_t lock;
 #elif (NBUF_TECHNIQUE == NBUF_DO_SPL)
-	int		lock;
+	char		lock;
 #endif
-	/* multi-read or multi-write contention only */
-	size_t		reserved;
-	size_t		uncommitted;
 };
 
 
@@ -123,6 +131,9 @@ It's main purpose is to avoid giving library users cancer when accessing
 #define NBUF_DEREF(type, pos, i, nb) (*((type*)nbuf_access(pos, i, nb)))
 
 
+/*
+	management
+*/
 int	nbuf_params(		size_t		blk_size,
 				size_t		blk_cnt,
 				struct nbuf	*out);
@@ -132,17 +143,23 @@ int	nbuf_init(		struct nbuf	*nb,
 
 void	nbuf_deinit(		struct nbuf	*nb);
 
+/*
+	reserve
+*/
+size_t nbuf_reserve(const struct nbuf_const	*ct,
+			struct nbuf_sym		*from,
+			size_t			*out_pos,
+			size_t			max_count);
 
-size_t	nbuf_reserve_single(const struct nbuf_const	*ct,
-				struct nbuf_sym		*from,
-				size_t			*out_pos,
-				size_t			count);
-size_t nbuf_reserve_single_var(const struct nbuf_const	*ct,
-				struct nbuf_sym		*from,
-				size_t			*out_pos);
-
+/*
+	release
+*/
 void	nbuf_release_single(const struct nbuf_const	*ct,
 				struct nbuf_sym		*to,
 				size_t			count);
 
+void	nbuf_release_multi(const struct nbuf_const	*ct,
+				struct nbuf_sym		*to,
+				size_t			count,
+				size_t			res_pos);
 #endif /* nbuf_h_ */

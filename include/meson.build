@@ -7,11 +7,11 @@ endif
 
 conf_data = configuration_data()
 
-conf_data.set('NBUF_DO_CAS', '1')
+conf_data.set('NBUF_DO_CAS', '1') #not currently implemented
 conf_data.set('NBUF_DO_XCH', '2')
 conf_data.set('NBUF_DO_MTX', '3')
 conf_data.set('NBUF_DO_SPL', '4')
-conf_data.set('NBUF_TECHNIQUE', conf_data.get('NBUF_DO_CAS'))
+conf_data.set('NBUF_TECHNIQUE', conf_data.get('NBUF_DO_XCH'))
 
 configure_file(input : 'config.h.in',
 	      output: 'config.h',

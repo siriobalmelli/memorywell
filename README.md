@@ -8,7 +8,8 @@ Shortlist of advantages:
 	- any block size
 	- multiple blocks per reservation (allows efficient "max possible blocks" scenario)
 	- any combination of single/multiple producer/consumer
-	- fast (split cache lines)
+	- fast (split cache lines; a reserve/release operation only touches ONE cache line)
+	- multiple producer/consumer only adds a sync step on release
 
 Cons:
 	- if **already** allocating memory, slower than an exchange-queue of pointers

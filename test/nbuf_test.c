@@ -1,16 +1,10 @@
-#include <zed_dbg.h>
 #include <nbuf.h>
+
+#include <zed_dbg.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <getopt.h>
 #include <nonlibc.h> /* timing */
-
-
-static size_t numiter = 100000000;
-static size_t blk_cnt = 256; /* how many blocks in the cbuf */
-static size_t blk_size = 8; /* in Bytes */
-static size_t reservation = 1; /* how many blocks to reserve at once */
-
 
 /* TODO:
 	- yield to a specific thread (eventing) instead of general yield()?
@@ -18,84 +12,94 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 */
 
 
-/*	tx_fixed()
-TX with a fixed reservation size.
+static size_t numiter = 100000000;
+static size_t blk_cnt = 256; /* how many blocks in the cbuf */
+static size_t blk_size = 8; /* in Bytes */
+
+static size_t tx_thread_cnt = 1;
+static pthread_t *tx = NULL;
+static size_t rx_thread_cnt = 1;
+static pthread_t *rx = NULL;
+
+static size_t reservation = 1; /* how many blocks to reserve at once */
+
+
+/*	tx_thread()
 */
-void *tx_fixed(void* arg)
+void *tx_single(void* arg)
 {
 	struct nbuf *nb = arg;
 	size_t tally = 0;
 
 	/* loop on TX */
-	for (size_t i=0; i < numiter; i += reservation) {
+	for (size_t i=0, res=0; i < numiter; i += res) {
 		size_t pos;
-		while ((nbuf_reserve_single(&nb->ct, &nb->tx, &pos, reservation)) != reservation)
+		while (!(res = nbuf_reserve(&nb->ct, &nb->tx, &pos, reservation)))
 			sched_yield(); /* no scheduling decisions taken by nbuf */
-		for (size_t j=0; j < reservation; j++)
+		for (size_t j=0; j < res; j++)
 			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
-		nbuf_release_single(&nb->ct, &nb->rx, reservation);
+		nbuf_release_single(&nb->ct, &nb->rx, res);
 	}
-
 	return (void *)tally;
 }
-
-/*	rx_fixed()
-*/
-void *rx_fixed(void* arg)
+void *tx_multi(void* arg)
 {
 	struct nbuf *nb = arg;
 	size_t tally = 0;
-	size_t seq_errs = 0; /* enforce that buffer is sequential */
+	size_t num = numiter / tx_thread_cnt;
 
-	/* loop on RX */
-	for (size_t i=0; i < numiter; i += reservation) {
+	/* loop on TX */
+	for (size_t i=0, res=0; i < num; i += res) {
 		size_t pos;
-		while ((nbuf_reserve_single(&nb->ct, &nb->rx, &pos, reservation)) != reservation)
+		while (!(res = nbuf_reserve(&nb->ct, &nb->tx, &pos, reservation)))
 			sched_yield(); /* no scheduling decisions taken by nbuf */
-		for (size_t j=0; j < reservation; j++) {
-			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
-			tally += temp;
-			/* Buffer should be sequential: it was written to
-				in the same order it is being read from.
-			*/
-			seq_errs += (temp != i + j);
-		}
-		nbuf_release_single(&nb->ct, &nb->tx, reservation);
+		for (size_t j=0; j < res; j++)
+			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
+		nbuf_release_multi(&nb->ct, &nb->rx, res, pos);
 	}
-	/* error if sequential consistency was violated */
-	Z_err_if(seq_errs, "%zu violations of sequential consistency", seq_errs);
-
 	return (void *)tally;
 }
 
-/*	rx_variable()
+
+/*	rx_thread()
 */
-void *rx_variable(void* arg)
+void *rx_single(void* arg)
 {
 	struct nbuf *nb = arg;
 	size_t tally = 0;
-	size_t seq_errs = 0; /* enforce that buffer is sequential */
 
 	/* loop on RX */
-	for (size_t i=0, reservation; i < numiter; i += reservation) {
+	for (size_t i=0, res=0; i < numiter; i += res) {
 		size_t pos;
-		while (!(reservation = nbuf_reserve_single_var(&nb->ct, &nb->rx, &pos)))
+		while (!(res = nbuf_reserve(&nb->ct, &nb->rx, &pos, reservation)))
 			sched_yield(); /* no scheduling decisions taken by nbuf */
-
-		for (size_t j=0; j < reservation; j++) {
+		for (size_t j=0; j < res; j++) {
 			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
 			tally += temp;
-			seq_errs += (temp != i + j);
 		}
-
-		nbuf_release_single(&nb->ct, &nb->tx, reservation);
+		nbuf_release_single(&nb->ct, &nb->tx, res);
 	}
-	/* error if sequential consistency was violated */
-	Z_err_if(seq_errs, "%zu violations of sequential consistency", seq_errs);
-
 	return (void *)tally;
 }
+void *rx_multi(void* arg)
+{
+	struct nbuf *nb = arg;
+	size_t tally = 0;
+	size_t num = numiter / rx_thread_cnt;
 
+	/* loop on RX */
+	for (size_t i=0, res=0; i < num; i += res) {
+		size_t pos;
+		while (!(res = nbuf_reserve(&nb->ct, &nb->rx, &pos, reservation)))
+			sched_yield(); /* no scheduling decisions taken by nbuf */
+		for (size_t j=0; j < res; j++) {
+			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
+			tally += temp;
+		}
+		nbuf_release_multi(&nb->ct, &nb->tx, res, pos);
+	}
+	return (void *)tally;
+}
 
 
 /*	usage()
@@ -110,7 +114,8 @@ Options:\n\
 -c, --count <blk_count>	:	How many blocks in the circular buffer.\n\
 -s, --size <blk_size>	:	Size of each block (bytes).\n\
 -r, --reservation <res>	:	(Attempt to) reserve <res> blocks at once.\n\
--e, --variable		:	RX (consumer) uses variable reservation size.\n\
+-t, --tx-threads	:	Number of TX threads.\n\
+-x, --rx-threads	:	Number of RX threads.\n\
 -h, --help		:	Print this message and exit.\n",
 		pgm_name);
 }
@@ -135,14 +140,12 @@ int main(int argc, char **argv)
 		{ "size",	required_argument,	0,	's'},
 		{ "count",	required_argument,	0,	'c'},
 		{ "reservation",required_argument,	0,	'r'},
-		{ "variable",	no_argument,		0,	'e'},
+		{ "tx-threads",	required_argument,	0,	't'},
+		{ "rx-threads",	required_argument,	0,	'x'},
 		{ "help",	no_argument,		0,	'h'}
 	};
 
-	/* fixed- or variable-reservation RX thread */
-	void *(*rx_thread)(void *) = rx_fixed;
-
-	while ((opt = getopt_long(argc, argv, "n:s:c:r:eh", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "n:s:c:r:t:x:h", long_options, NULL)) != -1) {
 		switch(opt)
 		{
 			case 'n':
@@ -171,8 +174,14 @@ int main(int argc, char **argv)
 					"reservation %zu; blk_cnt %zu", reservation, blk_cnt);
 				break;
 
-			case 'e':
-				rx_thread = rx_variable;
+			case 't':
+				opt = sscanf(optarg, "%zu", &tx_thread_cnt);
+				Z_die_if(opt != 1, "invalid tx_thread_cnt '%s'", optarg);
+				break;
+
+			case 'x':
+				opt = sscanf(optarg, "%zu", &rx_thread_cnt);
+				Z_die_if(opt != 1, "invalid rx_thread_cnt '%s'", optarg);
 				break;
 
 			case 'h':
@@ -184,10 +193,22 @@ int main(int argc, char **argv)
 				Z_die("option '%c' invalid", opt);
 		}
 	}
-	/* sanity check reservation size */
-	Z_die_if(numiter != nm_next_mult64(numiter, reservation),
-		"numiter %zu doesn't evenly divide into %zu reservation blocks",
-		numiter, reservation);
+	/* sanity check thread counts */
+	Z_die_if(numiter != nm_next_mult64(numiter, tx_thread_cnt),
+		"numiter %zu doesn't evenly divide into %zu tx threads",
+		numiter, tx_thread_cnt);
+	Z_die_if(numiter != nm_next_mult64(numiter, rx_thread_cnt),
+		"numiter %zu doesn't evenly divide into %zu rx threads",
+		numiter, rx_thread_cnt);
+	/* sanity check reservation sizes */
+	size_t num = numiter / tx_thread_cnt;
+	Z_die_if(num != nm_next_mult64(num, reservation),
+		"TX: num %zu doesn't evenly divide into %zu reservation blocks",
+		num, reservation);
+	num = numiter / rx_thread_cnt;
+	Z_die_if(num != nm_next_mult64(num, reservation),
+		"RX: num %zu doesn't evenly divide into %zu reservation blocks",
+		num, reservation);
 
 
 	/* create buffer */
@@ -199,16 +220,39 @@ int main(int argc, char **argv)
 		nbuf_init(&nb, malloc(nbuf_size(&nb)))
 		, "size %zu", nbuf_size(&nb));
 
+	void *(*tx_t)(void *) = tx_single;
+	if (tx_thread_cnt > 1)
+		tx_t = tx_multi;
+	Z_die_if(!(
+		tx = malloc(sizeof(pthread_t) + tx_thread_cnt)
+		), "");
+
+	void *(*rx_t)(void *) = rx_single;
+	if (rx_thread_cnt > 1)
+		rx_t = rx_multi;
+	Z_die_if(!(
+		rx = malloc(sizeof(pthread_t) + rx_thread_cnt)
+		), "");
+
 	nlc_timing_start(t);
 		/* fire reader-writer threads */
-		pthread_t tx, rx;
-		pthread_create(&tx, NULL, tx_fixed, &nb);
-		pthread_create(&rx, NULL, rx_thread, &nb);
+		for (size_t i=0; i < tx_thread_cnt; i++)
+			pthread_create(&tx[i], NULL, tx_t, &nb);
+		for (size_t i=0; i < rx_thread_cnt; i++)
+			pthread_create(&rx[i], NULL, rx_t, &nb);
 
 		/* wait for threads to finish */
 		size_t tx_i_sum = 0, rx_i_sum = 0;
-		pthread_join(tx, (void*)&tx_i_sum);
-		pthread_join(rx, (void*)&rx_i_sum);
+		for (size_t i=0; i < tx_thread_cnt; i++) {
+			void *tmp;
+			pthread_join(tx[i], &tmp);
+			tx_i_sum += (size_t)tmp;
+		}
+		for (size_t i=0; i < rx_thread_cnt; i++) {
+			void *tmp;
+			pthread_join(rx[i], &tmp);
+			rx_i_sum += (size_t)tmp;
+		}
 	nlc_timing_stop(t);
 
 	/* verify sums */
@@ -225,20 +269,21 @@ int main(int argc, char **argv)
 			@8 : (8-1)*0.5				= 3.5
 			@8 : 0+1+2+3+4+5+6+7 = (8-1)*0.5*8 = 28
 	*/
-	size_t verif_i_sum = (numiter -1) * 0.5 * numiter;
+	numiter /= tx_thread_cnt;
+	size_t verif_i_sum = (numiter -1) * 0.5 * numiter * tx_thread_cnt;
 	Z_die_if(verif_i_sum != tx_i_sum, "%zu != %zu", verif_i_sum, tx_i_sum);
 
 	/* print stats */
 	printf("numiter %zu; blk_size %zu; blk_count %zu; reservation %zu\n",
 		numiter, blk_size, blk_cnt, reservation);
-	if (rx_thread == rx_fixed)
-		printf("TX/RX reservation %zu\n", reservation);
-	else
-		printf("TX reservation %zu, RX variable\n", reservation);
+	printf("TX threads %zu; RX threads %zu\n",
+		tx_thread_cnt, rx_thread_cnt);
 	printf("cpu time: %.4lfs\n", nlc_timing_secs(t));
 
 out:
 	nbuf_deinit(&nb);
 	free(nb.ct.buf);
+	free(tx);
+	free(rx);
 	return err_cnt;
 }
