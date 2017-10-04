@@ -14,7 +14,7 @@
 
 static size_t numiter = 100000000;
 static size_t blk_cnt = 256; /* how many blocks in the cbuf */
-static size_t blk_size = 8; /* in Bytes */
+const static size_t blk_size = sizeof(size_t); /* in Bytes */
 
 static size_t tx_thread_cnt = 1;
 static pthread_t *tx = NULL;
@@ -109,10 +109,12 @@ void usage(const char *pgm_name)
 	fprintf(stderr, "Usage: %s [OPTIONS]\n\
 Test Single-Producer|Single-Consumer correctness/performance.\n\
 \n\
+Notes:\n\
+- block size is fixed at sizeof(size_t)\n\
+\n\
 Options:\n\
 -n, --numiter <iter>	:	Push <iter> blocks through the buffer.\n\
 -c, --count <blk_count>	:	How many blocks in the circular buffer.\n\
--s, --size <blk_size>	:	Size of each block (bytes).\n\
 -r, --reservation <res>	:	(Attempt to) reserve <res> blocks at once.\n\
 -t, --tx-threads	:	Number of TX threads.\n\
 -x, --rx-threads	:	Number of RX threads.\n\
@@ -137,7 +139,6 @@ int main(int argc, char **argv)
 	int opt = 0;
 	static struct option long_options[] = {
 		{ "numiter",	required_argument,	0,	'n'},
-		{ "size",	required_argument,	0,	's'},
 		{ "count",	required_argument,	0,	'c'},
 		{ "reservation",required_argument,	0,	'r'},
 		{ "tx-threads",	required_argument,	0,	't'},
@@ -145,19 +146,12 @@ int main(int argc, char **argv)
 		{ "help",	no_argument,		0,	'h'}
 	};
 
-	while ((opt = getopt_long(argc, argv, "n:s:c:r:t:x:h", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "n:c:r:t:x:h", long_options, NULL)) != -1) {
 		switch(opt)
 		{
 			case 'n':
 				opt = sscanf(optarg, "%zu", &numiter);
 				Z_die_if(opt != 1, "invalid numiter '%s'", optarg);
-				break;
-
-			case 's':
-				opt = sscanf(optarg, "%zu", &blk_size);
-				Z_die_if(opt != 1, "invalid blk_size '%s'", optarg);
-				Z_die_if(blk_size < 8 || blk_size > UINT32_MAX,
-					"blk_size %zu impossible", blk_size);
 				break;
 
 			case 'c':
@@ -278,7 +272,8 @@ int main(int argc, char **argv)
 		numiter, blk_size, blk_cnt, reservation);
 	printf("TX threads %zu; RX threads %zu\n",
 		tx_thread_cnt, rx_thread_cnt);
-	printf("cpu time: %.4lfs\n", nlc_timing_secs(t));
+	printf("cpu time %.4lfs; wall time %.4lfs\n",
+		nlc_timing_cpu(t), nlc_timing_wall(t));
 
 out:
 	nbuf_deinit(&nb);
