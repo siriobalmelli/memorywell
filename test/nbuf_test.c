@@ -224,14 +224,14 @@ int main(int argc, char **argv)
 	if (tx_thread_cnt > 1)
 		tx_t = tx_multi;
 	Z_die_if(!(
-		tx = malloc(sizeof(pthread_t) + tx_thread_cnt)
+		tx = malloc(sizeof(pthread_t) * tx_thread_cnt)
 		), "");
 
 	void *(*rx_t)(void *) = rx_single;
 	if (rx_thread_cnt > 1)
 		rx_t = rx_multi;
 	Z_die_if(!(
-		rx = malloc(sizeof(pthread_t) + rx_thread_cnt)
+		rx = malloc(sizeof(pthread_t) * rx_thread_cnt)
 		), "");
 
 	nlc_timing_start(t);
