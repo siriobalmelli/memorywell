@@ -9,6 +9,7 @@
 /* TODO:
 	- yield to a specific thread (eventing) instead of general yield()?
 	- validate reserve and release with '0' size.
+	- increase a "busy-waits" count instead of sched_yield()
 */
 
 
@@ -34,11 +35,11 @@ void *tx_single(void* arg)
 	/* loop on TX */
 	for (size_t i=0, res=0; i < numiter; i += res) {
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->ct, &nb->tx, &pos, reservation)))
+		while (!(res = nbuf_reserve(&nb->tx, &pos, reservation)))
 			sched_yield(); /* no scheduling decisions taken by nbuf */
 		for (size_t j=0; j < res; j++)
 			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
-		nbuf_release_single(&nb->ct, &nb->rx, res);
+		nbuf_release_single(&nb->rx, res);
 	}
 	return (void *)tally;
 }
@@ -51,11 +52,11 @@ void *tx_multi(void* arg)
 	/* loop on TX */
 	for (size_t i=0, res=0; i < num; i += res) {
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->ct, &nb->tx, &pos, reservation)))
+		while (!(res = nbuf_reserve(&nb->tx, &pos, reservation)))
 			sched_yield(); /* no scheduling decisions taken by nbuf */
 		for (size_t j=0; j < res; j++)
 			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
-		nbuf_release_multi(&nb->ct, &nb->rx, res, pos);
+		nbuf_release_multi(&nb->rx, res, pos);
 	}
 	return (void *)tally;
 }
@@ -71,13 +72,13 @@ void *rx_single(void* arg)
 	/* loop on RX */
 	for (size_t i=0, res=0; i < numiter; i += res) {
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->ct, &nb->rx, &pos, reservation)))
+		while (!(res = nbuf_reserve(&nb->rx, &pos, reservation)))
 			sched_yield(); /* no scheduling decisions taken by nbuf */
 		for (size_t j=0; j < res; j++) {
 			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
 			tally += temp;
 		}
-		nbuf_release_single(&nb->ct, &nb->tx, res);
+		nbuf_release_single(&nb->tx, res);
 	}
 	return (void *)tally;
 }
@@ -90,13 +91,13 @@ void *rx_multi(void* arg)
 	/* loop on RX */
 	for (size_t i=0, res=0; i < num; i += res) {
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->ct, &nb->rx, &pos, reservation)))
+		while (!(res = nbuf_reserve(&nb->rx, &pos, reservation)))
 			sched_yield(); /* no scheduling decisions taken by nbuf */
 		for (size_t j=0; j < res; j++) {
 			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
 			tally += temp;
 		}
-		nbuf_release_multi(&nb->ct, &nb->tx, res, pos);
+		nbuf_release_multi(&nb->tx, res, pos);
 	}
 	return (void *)tally;
 }

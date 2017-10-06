@@ -41,7 +41,7 @@ Memory allocation is left as an excercise to the caller so as to
 Write required sizes in '*out'.
 
 Call nbuf_size() on '*out' to get required buffer size.
-Call nbuf_blk_sz() on '*out' to get individual block size
+Call nbuf_blk_size() on '*out' to get individual block size
 	(which has been promoted to next power of 2).
 
 returns 0 on success
@@ -136,10 +136,9 @@ On failure, returns 0 and '*out_pos' is garbage.
 NOTE ON TIMING: will not wait; will not spin.
 	Caller decides whether to sleep(), yield() or whatever.
 */
-size_t nbuf_reserve(const struct nbuf_const	*ct,
-			struct nbuf_sym		*from,
-			size_t			*out_pos,
-			size_t			max_count)
+size_t nbuf_reserve(struct nbuf_sym	*from,
+			size_t		*out_pos,
+			size_t		max_count)
 {
 #if (NBUF_TECHNIQUE == NBUF_DO_XCH)
 	size_t count = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
@@ -189,9 +188,8 @@ WARNING: ONLY call from SINGLE producer/consumer.
 NOTE RE LOCKING: this function will always succeed;
 	this means we are obliged to mutex_wait or spinlock until we acquire a lock.
 */
-void nbuf_release_single(const struct nbuf_const	*ct,
-				struct nbuf_sym		*to,
-				size_t			count)
+void nbuf_release_single(struct nbuf_sym	*to,
+				size_t		count)
 {
 #if (NBUF_TECHNIQUE == NBUF_DO_XCH)
 	__atomic_add_fetch(&to->avail, count, __ATOMIC_RELEASE);
@@ -214,12 +212,14 @@ void nbuf_release_single(const struct nbuf_const	*ct,
 Release a reservation made under contention (multiple threads on RX or TX side).
 Requires 'res_pos' which is the 'pos' value written by an earlier successful
 	call to reserve().
-WARNING: nonsense values of 'count' or 'res_pos' can lock up the entire buffer.
+WARNINGS:
+	- nonsense values of 'count' or 'res_pos' can lock up the entire buffer.
+	- NEVER use both _release_single() and _release_multi()
+		on the same side of the buffer.
 */
-void	nbuf_release_multi(const struct nbuf_const	*ct,
-				struct nbuf_sym		*to,
-				size_t			count,
-				size_t			res_pos)
+void	nbuf_release_multi(struct nbuf_sym	*to,
+				size_t		count,
+				size_t		res_pos)
 {
 #if (NBUF_TECHNIQUE == NBUF_DO_XCH)
 	/* tactic: use 'uncommitted' as a spinlock.

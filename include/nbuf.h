@@ -91,12 +91,19 @@ NLC_INLINE size_t nbuf_size(const struct nbuf *nb)
 	return nb->ct.overflow + 1;
 }
 
-/*	nbuf_blk_sz()
+/*	nbuf_blk_size()
 Returns the size of one buffer block.
 */
-NLC_INLINE size_t nbuf_blk_sz(const struct nbuf *nb)
+NLC_INLINE size_t nbuf_blk_size(const struct nbuf *nb)
 {
 	return nb->ct.blk_size;
+}
+/*	nbuf_blk_count()
+How many blocks in the buffer.
+*/
+NLC_INLINE size_t nbuf_blk_count(const struct nbuf *nb)
+{
+	return nbuf_size(nb) >> nb->ct.blk_shift;
 }
 
 
@@ -146,20 +153,17 @@ void	nbuf_deinit(		struct nbuf	*nb);
 /*
 	reserve
 */
-size_t nbuf_reserve(const struct nbuf_const	*ct,
-			struct nbuf_sym		*from,
-			size_t			*out_pos,
-			size_t			max_count);
+size_t nbuf_reserve(struct nbuf_sym	*from,
+			size_t		*out_pos,
+			size_t		max_count);
 
 /*
 	release
 */
-void	nbuf_release_single(const struct nbuf_const	*ct,
-				struct nbuf_sym		*to,
-				size_t			count);
+void	nbuf_release_single(struct nbuf_sym	*to,
+				size_t		count);
 
-void	nbuf_release_multi(const struct nbuf_const	*ct,
-				struct nbuf_sym		*to,
-				size_t			count,
-				size_t			res_pos);
+void	nbuf_release_multi(struct nbuf_sym	*to,
+				size_t		count,
+				size_t		res_pos);
 #endif /* nbuf_h_ */
