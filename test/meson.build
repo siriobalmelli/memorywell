@@ -36,20 +36,24 @@ endforeach
 techniques = [ 'NBUF_DO_XCH', 'NBUF_DO_MTX', 'NBUF_DO_SPL' ]
 
 foreach t : techniques
-  a_test = executable(t, [ 'nbuf_test.c', '../src/nbuf.c' ],
-		      include_directories : inc,
-		      dependencies : [ deps, thread_dep ],
-		      c_args : ['-DNBUF_TECHNIQUE=' + t])
-  test(t + '; 1 -> 1', a_test,
-	args : [ '-r', '64' ],
-	is_parallel : false)
-  test(t + '; 2 -> 1', a_test,
-	args : [ '-r', '64', '-t', '2' ],
-	is_parallel : false)
-  test(t + '; 1 -> 2', a_test,
-	args : [ '-r', '64', '-x', '2' ],
-	is_parallel : false)
-  test(t + '; 2 -> 2', a_test,
-	args : [ '-r', '64', '-t', '2', '-x', '2' ],
-	is_parallel : false)
+  test_defines = [ 'YIELD', 'COUNT', 'SPIN' ]
+  foreach def : test_defines
+    a_test = executable(t + '-' + def, [ 'nbuf_test.c', '../src/nbuf.c' ],
+			include_directories : inc,
+			dependencies : [ deps, thread_dep ],
+			c_args : [ '-DFAIL_METHOD=' + def, '-DNBUF_TECHNIQUE=' + t])
+
+    test(t + '-' + def + '; 1 -> 1', a_test,
+	  args : [ '-r', '64' ],
+	  is_parallel : false)
+    test(t + '-' + def + '; 2 -> 1', a_test,
+	  args : [ '-r', '64', '-t', '2' ],
+	  is_parallel : false)
+    test(t + '-' + def + '; 1 -> 2', a_test,
+	  args : [ '-r', '64', '-x', '2' ],
+	  is_parallel : false)
+    test(t + '-' + def + '; 2 -> 2', a_test,
+	  args : [ '-r', '64', '-t', '2', '-x', '2' ],
+	  is_parallel : false)
+  endforeach
 endforeach

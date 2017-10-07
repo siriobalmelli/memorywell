@@ -174,7 +174,7 @@ Some points to note:
 1. Reservation of multiple blocks simultaneously:
 	synchronization costs spread over a large number of blocks.
 
-1. Variable reservation size: returns **any** number of available blocks
+1. Variable reservation size: returns any number of available blocks
 	up to the requested amount (which may be `-1` to get all available blocks).
 
 1. Symmetric: blocks are reserved and released identically on either side
@@ -205,6 +205,12 @@ This is an advantage when performing zero-copy I/O into and out of the buffer:
 This makes it possible to point a buffer to a region already containing data,
 	such as a memory-mapped file, and then using the buffer to synchronize
 	access by multiple threads to successive blocks of the file.
+
+### portable
+
+1. Uses C11 Atomics
+1. Does not rely on platform-selective tricks
+	such as combining multiple variables into a single atomic CAS, etc
 
 ### slower than an exchange-only queue of pointers
 
@@ -256,3 +262,13 @@ Please refer to the work of *Paul E. McKenney* as well as
 - <https://github.com/Nyufu/LockFreeRingBuffer/blob/master/unittests/EnqueueDequeueOrder4Thread.cpp>
 - <https://github.com/shramov/ring>
 - <https://github.com/ixtli/ringbuffer>
+
+## What's with the name tho
+
+All the cliché titles like *lock-free*, *atomic*, *supercritical* and *cherenkov*
+	were predictably taken, and adding to the roughly 400 search results for
+	*circular buffer* would have been a bit of a buzz-kill.
+
+Hence: **MemoryWell**; your friendly neighborhood circular buffer:
+	- a well from whence to draw memory
+	- a well-implemented circular buffer

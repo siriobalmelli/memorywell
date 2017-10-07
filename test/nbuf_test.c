@@ -25,6 +25,22 @@ static pthread_t *rx = NULL;
 static size_t reservation = 1; /* how many blocks to reserve at once */
 
 
+/*
+	allow compiling with different wait strategies
+*/
+#define SPIN 1
+#define COUNT 2
+#define YIELD 3
+
+#ifndef FAIL_METHOD
+#define FAIL_METHOD YIELD
+#endif
+
+#if (FAIL_METHOD == COUNT)
+static size_t waits = 0; /* how many times did threads wait? */
+#endif
+
+
 /*	tx_thread()
 */
 void *tx_single(void* arg)
@@ -36,7 +52,16 @@ void *tx_single(void* arg)
 	for (size_t i=0, res=0; i < numiter; i += res) {
 		size_t pos;
 		while (!(res = nbuf_reserve(&nb->tx, &pos, reservation)))
+#if (FAIL_METHOD == SPIN)
+			;
+#elif (FAIL_METHOD == COUNT)
+			__atomic_add_fetch(&waits, 1, __ATOMIC_RELAXED);
+#elif (FAIL_METHOD == YIELD)
 			sched_yield(); /* no scheduling decisions taken by nbuf */
+#else
+#error "fail method not implemented"
+#endif
+
 		for (size_t j=0; j < res; j++)
 			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
 		nbuf_release_single(&nb->rx, res);
@@ -53,7 +78,16 @@ void *tx_multi(void* arg)
 	for (size_t i=0, res=0; i < num; i += res) {
 		size_t pos;
 		while (!(res = nbuf_reserve(&nb->tx, &pos, reservation)))
+#if (FAIL_METHOD == SPIN)
+			;
+#elif (FAIL_METHOD == COUNT)
+			__atomic_add_fetch(&waits, 1, __ATOMIC_RELAXED);
+#elif (FAIL_METHOD == YIELD)
 			sched_yield(); /* no scheduling decisions taken by nbuf */
+#else
+#error "fail method not implemented"
+#endif
+
 		for (size_t j=0; j < res; j++)
 			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
 		nbuf_release_multi(&nb->rx, res, pos);
@@ -73,7 +107,16 @@ void *rx_single(void* arg)
 	for (size_t i=0, res=0; i < numiter; i += res) {
 		size_t pos;
 		while (!(res = nbuf_reserve(&nb->rx, &pos, reservation)))
+#if (FAIL_METHOD == SPIN)
+			;
+#elif (FAIL_METHOD == COUNT)
+			__atomic_add_fetch(&waits, 1, __ATOMIC_RELAXED);
+#elif (FAIL_METHOD == YIELD)
 			sched_yield(); /* no scheduling decisions taken by nbuf */
+#else
+#error "fail method not implemented"
+#endif
+
 		for (size_t j=0; j < res; j++) {
 			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
 			tally += temp;
@@ -92,7 +135,16 @@ void *rx_multi(void* arg)
 	for (size_t i=0, res=0; i < num; i += res) {
 		size_t pos;
 		while (!(res = nbuf_reserve(&nb->rx, &pos, reservation)))
+#if (FAIL_METHOD == SPIN)
+			;
+#elif (FAIL_METHOD == COUNT)
+			__atomic_add_fetch(&waits, 1, __ATOMIC_RELAXED);
+#elif (FAIL_METHOD == YIELD)
 			sched_yield(); /* no scheduling decisions taken by nbuf */
+#else
+#error "fail method not implemented"
+#endif
+
 		for (size_t j=0; j < res; j++) {
 			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
 			tally += temp;
@@ -273,6 +325,9 @@ int main(int argc, char **argv)
 		numiter, blk_size, blk_cnt, reservation);
 	printf("TX threads %zu; RX threads %zu\n",
 		tx_thread_cnt, rx_thread_cnt);
+#if (FAIL_METHOD == COUNT)
+	printf("waits: %zu\n", waits);
+#endif
 	printf("cpu time %.4lfs; wall time %.4lfs\n",
 		nlc_timing_cpu(t), nlc_timing_wall(t));
 
