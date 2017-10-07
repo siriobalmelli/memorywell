@@ -43,17 +43,15 @@ foreach t : techniques
 			dependencies : [ deps, thread_dep ],
 			c_args : [ '-DFAIL_METHOD=' + def, '-DNBUF_TECHNIQUE=' + t])
 
-    test(t + '-' + def + '; 1 -> 1', a_test,
-	  args : [ '-r', '64' ],
-	  is_parallel : false)
-    test(t + '-' + def + '; 2 -> 1', a_test,
-	  args : [ '-r', '64', '-t', '2' ],
-	  is_parallel : false)
-    test(t + '-' + def + '; 1 -> 2', a_test,
-	  args : [ '-r', '64', '-x', '2' ],
-	  is_parallel : false)
-    test(t + '-' + def + '; 2 -> 2', a_test,
-	  args : [ '-r', '64', '-t', '2', '-x', '2' ],
-	  is_parallel : false)
+	thread_counts = [ '1', '2' ]
+	foreach tx : thread_counts
+	  foreach rx : thread_counts
+		test(t + '-' + def + '; ' + tx + '->' + rx,
+		  a_test,
+		  args : [ '-c', '1024', '-r', '64', '-t', tx, '-x', rx],
+		  #		  args : [ '-n', '10000', '-c', '1024', '-r', '100', '-t', tx, '-x', rx],
+		  is_parallel : false)
+	  endforeach
+	endforeach
   endforeach
 endforeach

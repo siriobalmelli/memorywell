@@ -36,10 +36,6 @@ struct nbuf_sym {
 		multi-read or multi-write contention
 	*/
 	size_t		release_pos;	/* pos of earliest release */
-	size_t		uncommitted;	/* "released" out-of-order,
-						waiting for earlier reservation
-						to be released.
-					*/
 	/*
 		locking
 	*/
@@ -141,29 +137,31 @@ It's main purpose is to avoid giving library users cancer when accessing
 /*
 	management
 */
-int	nbuf_params(		size_t		blk_size,
+NLC_PUBLIC int	nbuf_params(	size_t		blk_size,
 				size_t		blk_cnt,
 				struct nbuf	*out);
 
-int	nbuf_init(		struct nbuf	*nb,
+NLC_PUBLIC int	nbuf_init(	struct nbuf	*nb,
 				void		*mem);
 
-void	nbuf_deinit(		struct nbuf	*nb);
+NLC_PUBLIC void	nbuf_deinit(	struct nbuf	*nb);
 
 /*
 	reserve
 */
-size_t nbuf_reserve(struct nbuf_sym	*from,
-			size_t		*out_pos,
-			size_t		max_count);
+NLC_PUBLIC __attribute__((warn_unused_result))
+	size_t nbuf_reserve(	struct nbuf_sym	*from,
+				size_t		*out_pos,
+				size_t		max_count);
 
 /*
 	release
 */
-void	nbuf_release_single(struct nbuf_sym	*to,
-				size_t		count);
+NLC_PUBLIC void	nbuf_release_single(	struct nbuf_sym	*to,
+					size_t		count);
 
-void	nbuf_release_multi(struct nbuf_sym	*to,
-				size_t		count,
-				size_t		res_pos);
+NLC_PUBLIC __attribute__((warn_unused_result))
+	size_t	nbuf_release_multi(	struct nbuf_sym	*to,
+					size_t		count,
+					size_t		res_pos);
 #endif /* nbuf_h_ */

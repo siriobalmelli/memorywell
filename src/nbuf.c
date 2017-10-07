@@ -2,6 +2,8 @@
 #include <nbuf.h>
 #include <nmath.h>
 
+/* TODO: can relax anything? */
+
 /*
 	compile-time sanity
 */
@@ -90,7 +92,6 @@ int nbuf_init(struct nbuf *nb, void *mem)
 {
 	int err_cnt = 0;
 	Z_die_if(!nb, "");
-	nb->tx.uncommitted = nb->rx.uncommitted = 0;
 	nb->tx.release_pos = nb->rx.release_pos = 0;
 
 	Z_die_if(!mem, "");
@@ -216,166 +217,36 @@ WARNINGS:
 	- nonsense values of 'count' or 'res_pos' can lock up the entire buffer.
 	- NEVER use both _release_single() and _release_multi()
 		on the same side of the buffer.
+
+returns 0 on failure, original value of 'count' on success.
 */
-void	nbuf_release_multi(struct nbuf_sym	*to,
+size_t	nbuf_release_multi(struct nbuf_sym	*to,
 				size_t		count,
 				size_t		res_pos)
 {
 #if (NBUF_TECHNIQUE == NBUF_DO_XCH)
-	/* tactic: use 'uncommitted' as a spinlock.
-		'-1' means "in flux"
-	*/
-	size_t uncommit;
-	while ((uncommit = __atomic_exchange_n(&to->uncommitted, -1, __ATOMIC_ACQUIRE)) == -1)
-		;
-	count += uncommit;
-
-	/* 'release_pos' is only accessed under spinlock protection:
-		atomics not necessary */
-	if (to->release_pos == res_pos) {
-		/* reservation ACQUIRE syncs with this RELEASE */
-		__atomic_add_fetch(&to->avail, count, __ATOMIC_RELEASE);
-		to->release_pos += count;
-		count = 0;
-	}
-
-	__atomic_store_n(&to->uncommitted, count, __ATOMIC_RELEASE);
-
-
-#elif (NBUF_TECHNIQUE == NBUF_DO_MTX || NBUF_TECHNIQUE == NBUF_DO_SPL)
-	LOCK_(&to->lock);
-		to->uncommitted += count;
-		if (to->release_pos == res_pos) {
-			to->avail += to->uncommitted;
-			to->release_pos += to->uncommitted;
-			to->uncommitted = 0;
-		}
-	UNLOCK_(&to->lock);
-
-
-#else
-#error "nbuf technique not implemented"
-#endif
-}
-
-
-/*
-	old, background material, no longer used
-*/
-#if 0
-/*	nbuf_reserve()
-*/
-size_t nbuf_reserve(const struct nbuf_const	*ct,
-			struct nbuf_sym		*from,
-			size_t			*out_pos,
-			size_t			count)
-{
-	/*	critical section
-
-	Data synchronization with other threads relies on these calls,
-		so minimum memory model here is ACQUIRE.
-	Also, no operation on 'pos' should be hoisted into/above this block.
-	*/
-#if (NBUF_TECHNIQUE == NBUF_DO_CAS)
-	size_t avail = __atomic_load_n(&from->avail, __ATOMIC_RELAXED);
-	if (avail < count)
+	if (!__atomic_compare_exchange_n(&to->release_pos, &res_pos, res_pos + count,
+					0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
 		return 0;
 
-	/* Loop on spurious failures or other writes as long as we still have
-		a chance to reserve.
-	*/
-	while (!(__atomic_compare_exchange_n(&from->avail, &avail, avail-count, 1,
-					__ATOMIC_ACQUIRE, __ATOMIC_RELAXED)
-	)) {
-		if (avail < count)
-			return 0;
-	}
-	/* post-critical: we've synchronized availability
-		and don't contend for position since we're _single()
-		**on this side of the buf** - other side may be _multi()!
-	*/
-	*out_pos = __atomic_fetch_add(&from->pos, count, __ATOMIC_RELAXED);
-	return count;
-
-
-#elif (NBUF_TECHNIQUE == NBUF_DO_XCH)
-	size_t avail = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
-	/* no slots available */
-	if (!avail) {
-		return 0;
-
-	/* too few slots available */
-	} else if (avail < count) {
-		/* Only ever ADD back in: otherwise multiple concurrent
-			failures would either lose data or have to CAS-loop.
-		*/
-		__atomic_add_fetch(&from->avail, avail, __ATOMIC_RELAXED);
-		return 0;
-
-	/* too many slots available */
-	} else if (avail > count) {
-		__atomic_add_fetch(&from->avail, avail-count, __ATOMIC_RELAXED);
-	}
-	/* just right: goldilocks gets her slots */
-	*out_pos = __atomic_fetch_add(&from->pos, count, __ATOMIC_RELAXED);
+	__atomic_add_fetch(&to->avail, count, __ATOMIC_RELEASE);
 	return count;
 
 
 #elif (NBUF_TECHNIQUE == NBUF_DO_MTX || NBUF_TECHNIQUE == NBUF_DO_SPL)
 	size_t ret = 0;
-	if(!TRYLOCK_(&from->lock)) {
-		if (from->avail >= count) {
-			from->avail -= count;
-			*out_pos = from->pos;
-			from->pos += count;
+	if (!TRYLOCK_(&to->lock)) {
+		if (to->release_pos == res_pos) {
+			to->avail += count;
+			to->release_pos += count;
 			ret = count;
 		}
-		UNLOCK_(&from->lock);
+		UNLOCK_(&to->lock);
 	}
 	return ret;
 
-#else
-#error "nbuf technique not implemented"
-#endif
-}
-
-
-
-/*	nbuf_reserve_var()
-Variable reservation size - allows for opportunistic reservation as long
-	as any amount of blocks are available.
-Outputs number of blocks reserved to 'out_size'.
-
-This is actually more efficient than _reserve() above.
-See _reserve() for additional notes.
-*/
-size_t nbuf_reserve_var(const struct nbuf_const	*ct,
-			struct nbuf_sym		*from,
-			size_t			*out_pos)
-{
-#if (NBUF_TECHNIQUE == NBUF_DO_CAS || NBUF_TECHNIQUE == NBUF_DO_XCH)
-	size_t count = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
-	if (!count)
-		return 0;
-	*out_pos = __atomic_fetch_add(&from->pos, count, __ATOMIC_RELAXED);
-	return count;
-
-
-#elif (NBUF_TECHNIQUE == NBUF_DO_MTX || NBUF_TECHNIQUE == NBUF_DO_SPL)
-	size_t count = 0;
-	if (!TRYLOCK_(&from->lock)) {
-		if (from->avail) {
-			*out_pos = from->pos;
-			from->pos += count = from->avail;
-			from->avail = 0;
-		}
-		UNLOCK_(&from->lock);
-	}
-	return count;
-
 
 #else
 #error "nbuf technique not implemented"
 #endif
 }
-#endif

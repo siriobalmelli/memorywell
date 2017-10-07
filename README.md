@@ -97,15 +97,14 @@ For this reason, buffers/queues are usually referred to as:
 The design of this library is such that `reserve()` is already safe
 	whether used by single or multiple producer/consumer thread(s).
 
-With `release()` however, there is an additional accounting step necessary
-	in the "multiple" case: to guarantee that any **earlier** reservations
-	have already been released, or to queue our blocks for release when
-	earlier reservations are later released by another thread.
+With `release()` however, in the "multiple" case we must guarantee that any
+	**earlier** reservations have already been released.
 This is performed in `release_multi()`.
 
-As this accounting step is slightly more expensive,
-	the caller is given the option of the faster `release_single()` if they
-	know only a single thread will access one side (`tx` or `rx`) of the buffer.
+`_release_multi()` is more expensive **and may fail**;
+	so the caller is given the option of the faster and guaranteed successful
+	`_release_single()` if they know only a single thread will access
+	one side (`tx` or `rx`) of the buffer.
 
 The previous code example, to become multi-threaded, need only change
 	the release call:
@@ -130,9 +129,10 @@ void *producer_thread_multi(void *args)
 		Multiple producer threads are contending on this
 			side of the buffer: use _multi() release
 			to ensure other side of the buffer does
-			not see unreleased data.
+			not see unfinished data.
 		*/
-		nbuf_release_multi(&buffer->rx, res, pos);
+		while (!nbuf_release_multi(&buffer->rx, res, pos))
+			sched_yield();
 	}
 }
 ```
