@@ -49,7 +49,6 @@ foreach t : techniques
 		test(t + '-' + def + '; ' + tx + '->' + rx,
 		  a_test,
 		  args : [ '-c', '1024', '-r', '64', '-t', tx, '-x', rx],
-		  #		  args : [ '-n', '10000', '-c', '1024', '-r', '100', '-t', tx, '-x', rx],
 		  is_parallel : false)
 	  endforeach
 	endforeach
