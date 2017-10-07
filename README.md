@@ -244,6 +244,7 @@ Please refer to the work of *Paul E. McKenney* as well as
 
 ## TODO
 
+- describe buid system and test options
 - speed differential if combining cache lines (actual impact of false sharing)?
 - generic nmath functions so 32-bit size_t case is cared for
 - no safety checking or locking on init/deinit; unsure of the best approach here
