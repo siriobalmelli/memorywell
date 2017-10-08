@@ -84,6 +84,23 @@ Any of the programs in the [test](test/) directory serves a documentation
 
 **TODO**: link to man pages.
 
+## Building and Installing
+
+You'll need Python ≥ 3.5.
+
+Build and test on your machine by running:
+
+```bash
+./bootstrap.py
+```
+
+This project uses the [Meson Build System](http://mesonbuild.com/).
+
+For in-depth instructions on how to incorporate a Meson project in your
+	build ecosystem, see [the nonlibc library](https://siriobalmelli.github.io/nonlibc/).
+
+This project depends on nonlibc; Meson should handle that for you automatically.
+
 ## What's with the name tho
 
 All the cliché titles like *lock-free*, *atomic*, *supercritical* and *cherenkov*

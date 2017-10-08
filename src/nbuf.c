@@ -2,8 +2,6 @@
 #include <nbuf.h>
 #include <nmath.h>
 
-/* TODO: can relax anything? */
-
 /*
 	compile-time sanity
 */
