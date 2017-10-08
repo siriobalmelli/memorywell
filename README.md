@@ -101,6 +101,15 @@ For in-depth instructions on how to incorporate a Meson project in your
 
 This project depends on nonlibc; Meson should handle that for you automatically.
 
+NOTE that nonlibc is included as a [Git Subtree](https://help.github.com/articles/about-git-subtree-merges/);
+	if you change anything please commit the nonlibc changes **separately** so
+	they can be merged into the nonlibc repo upstream.
+
+## Support
+
+Communication is always welcome, feel free to send a pull request
+	or drop me a line at <sirio.bm@gmail.com>.
+
 ## What's with the name tho
 
 All the cliché titles like *lock-free*, *atomic*, *supercritical* and *cherenkov*

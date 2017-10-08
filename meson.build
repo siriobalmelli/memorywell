@@ -1,11 +1,11 @@
 #project
-project('cbuf', 'c',
+project('memorywell', 'c',
 	version : '0.1.0',
 	default_options : [ 'c_std=gnu11' ])
 description = 'nonblocking circular buffer'
 
 #sanity
-assert(meson.project_name() == 'cbuf', 'Incorrect project name')
+assert(meson.project_name() == 'memorywell', 'Incorrect project name')
 
 
 #
@@ -35,7 +35,8 @@ endif
 
 
 # deps
-nonlibc = dependency('nonlibc', fallback : ['nonlibc', 'nonlibc_dep']) 
+nonlibc = dependency('nonlibc', fallback : ['nonlibc', 'nonlibc_dep'],
+		    version : '>=0.1.7') 
 # All deps in a single arg. Use THIS ONE in compile calls
 deps = [ nonlibc ]
 
