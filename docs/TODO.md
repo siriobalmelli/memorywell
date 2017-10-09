@@ -14,6 +14,7 @@ order: 0
 - C++ extensions
 - non-contention cost of operations (reserving and releasing buffer blocks
 	one by one)
+- validate zero-reserve and zero-release
 - example of stack allocation
 - example of underlying file access
 - example of returning data to producers

@@ -1,4 +1,4 @@
-#include <nbuf.h>
+#include <well.h>
 
 #include <zed_dbg.h>
 #include <stdlib.h>
@@ -31,6 +31,9 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 #define COUNT 2
 #define YIELD 3
 #define SLEEP 4
+#define SIGNAL 5	/* TODO: implement signaling between threads on each side
+				of the buffer.
+			*/
 
 #ifndef FAIL_METHOD
 #define FAIL_METHOD YIELD
@@ -44,7 +47,7 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 	#define DO_FAIL() __atomic_add_fetch(&waits, 1, __ATOMIC_RELAXED)
 
 #elif (FAIL_METHOD == YIELD)
-	#define DO_FAIL() sched_yield() /* no scheduling decisions taken by nbuf */
+	#define DO_FAIL() sched_yield() /* no scheduling decisions taken by well */
 
 /* Warning: this is horrifyingly slow on my machine */
 #elif (FAIL_METHOD == SLEEP)
@@ -61,7 +64,7 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 */
 void *tx_single(void* arg)
 {
-	struct nbuf *nb = arg;
+	struct well *nb = arg;
 	size_t tally = 0;
 	size_t num = numiter;
 
@@ -70,18 +73,18 @@ void *tx_single(void* arg)
 		size_t ask = i + reservation < num ? reservation : num - i;
 
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->tx, &pos, ask)))
+		while (!(res = well_reserve(&nb->tx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++)
-			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
-		nbuf_release_single(&nb->rx, res);
+			tally += WELL_DEREF(size_t, pos, j, nb) = i + j;
+		well_release_single(&nb->rx, res);
 	}
 	return (void *)tally;
 }
 void *tx_multi(void* arg)
 {
-	struct nbuf *nb = arg;
+	struct well *nb = arg;
 	size_t tally = 0;
 	size_t num = numiter / tx_thread_cnt;
 
@@ -90,13 +93,13 @@ void *tx_multi(void* arg)
 		size_t ask = i + reservation < num ? reservation : num - i;
 
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->tx, &pos, ask)))
+		while (!(res = well_reserve(&nb->tx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++)
-			tally += NBUF_DEREF(size_t, pos, j, nb) = i + j;
+			tally += WELL_DEREF(size_t, pos, j, nb) = i + j;
 
-		while (!nbuf_release_multi(&nb->rx, res, pos))
+		while (!well_release_multi(&nb->rx, res, pos))
 			DO_FAIL();
 	}
 	return (void *)tally;
@@ -107,7 +110,7 @@ void *tx_multi(void* arg)
 */
 void *rx_single(void* arg)
 {
-	struct nbuf *nb = arg;
+	struct well *nb = arg;
 	size_t tally = 0;
 	size_t num = numiter;
 
@@ -116,20 +119,20 @@ void *rx_single(void* arg)
 		size_t ask = i + reservation < num ? reservation : num - i;
 
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->rx, &pos, ask)))
+		while (!(res = well_reserve(&nb->rx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++) {
-			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
+			size_t temp = WELL_DEREF(size_t, pos, j, nb);
 			tally += temp;
 		}
-		nbuf_release_single(&nb->tx, res);
+		well_release_single(&nb->tx, res);
 	}
 	return (void *)tally;
 }
 void *rx_multi(void* arg)
 {
-	struct nbuf *nb = arg;
+	struct well *nb = arg;
 	size_t tally = 0;
 	size_t num = numiter / rx_thread_cnt;
 
@@ -138,15 +141,15 @@ void *rx_multi(void* arg)
 		size_t ask = i + reservation < num ? reservation : num - i;
 
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->rx, &pos, ask)))
+		while (!(res = well_reserve(&nb->rx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++) {
-			size_t temp = NBUF_DEREF(size_t, pos, j, nb);
+			size_t temp = WELL_DEREF(size_t, pos, j, nb);
 			tally += temp;
 		}
 
-		while (!nbuf_release_multi(&nb->tx, res, pos))
+		while (!well_release_multi(&nb->tx, res, pos))
 			DO_FAIL();
 	}
 	return (void *)tally;
@@ -259,13 +262,13 @@ int main(int argc, char **argv)
 
 
 	/* create buffer */
-	struct nbuf nb = { {0} };
+	struct well nb = { {0} };
 	Z_die_if(
-		nbuf_params(blk_size, blk_cnt, &nb)
+		well_params(blk_size, blk_cnt, &nb)
 		, "");
 	Z_die_if(
-		nbuf_init(&nb, malloc(nbuf_size(&nb)))
-		, "size %zu", nbuf_size(&nb));
+		well_init(&nb, malloc(well_size(&nb)))
+		, "size %zu", well_size(&nb));
 
 	void *(*tx_t)(void *) = tx_single;
 	if (tx_thread_cnt > 1)
@@ -332,7 +335,7 @@ int main(int argc, char **argv)
 		nlc_timing_cpu(t), nlc_timing_wall(t));
 
 out:
-	nbuf_deinit(&nb);
+	well_deinit(&nb);
 	free(nb.ct.buf);
 	free(tx);
 	free(rx);
