@@ -12,7 +12,7 @@
 */
 
 
-static size_t numiter = 100000000;
+static size_t numiter = 50000000;
 static size_t blk_cnt = 256; /* how many blocks in the cbuf */
 const static size_t blk_size = sizeof(size_t); /* in Bytes */
 
