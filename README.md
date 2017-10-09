@@ -143,6 +143,17 @@ The test routine being used for benchmarking, [nbuf_test.c](test/nbuf_test.c),
 Communication is always welcome, feel free to send a pull request
 	or drop me a line at <sirio.bm@gmail.com>.
 
+### Acknowledgements
+
+A big Thank You to:
+
+- [Tony](https://github.com/TonyTheLion) for code, benchmarks, discussions,
+	and pairing on the `_release_multi()` bug.
+- Brook Z of [Massive Alliance](https://www.massivealliance.com/) for
+	very good advice.
+- Robert Anderson of [RPA Consultants](https://github.com/rpaboulder) for code
+	and time spent going over the memory model.
+
 ## What's with the name tho
 
 All the cliché titles like *lock-free*, *atomic*, *supercritical* and *cherenkov*

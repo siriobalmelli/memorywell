@@ -4,3 +4,4 @@ build-*
 cscope*
 toolchain/ninja*
 _site
+.DS_Store
