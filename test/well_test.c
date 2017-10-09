@@ -260,6 +260,10 @@ int main(int argc, char **argv)
 	/* ... for finite values tho */
 	Z_die_if(numiter > 1000000000, "one billion is plenty thanks");
 
+	/* do MANY less iterations if running under Valgrind! */
+	if (getenv("VALGRIND") && numiter >1000000)
+		numiter = 1000000;
+
 
 	/* create buffer */
 	struct well buf = { {0} };
