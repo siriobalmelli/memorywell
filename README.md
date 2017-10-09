@@ -148,8 +148,9 @@ All the cliché titles like *lock-free*, *atomic*, *supercritical* and *cherenko
 	were predictably taken, and adding to the roughly 400 search results for
 	*circular buffer* would have been a bit of a buzz-kill.
 
-Hence: **MemoryWell**; your friendly neighborhood circular buffer:
-	- a well from whence to draw memory
-	- a well-implemented circular buffer
+Hence **MemoryWell**, your friendly neighborhood circular buffer:
+
+-	a well from whence to draw memory
+-	a well-implemented circular buffer
 
 ## le official project [TODO list](docs/TODO.md)
