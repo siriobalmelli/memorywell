@@ -6,6 +6,12 @@ description = 'Collection of standard-not-standard utilities for the discerning 
 
 #sanity
 assert(meson.project_name() == 'nonlibc', 'Incorrect project name')
+# pretty much every 'install' parameter
+if not meson.is_subproject()
+	do_install = true
+else
+	do_install = false
+endif
 
 compiler = meson.get_compiler('c')
 

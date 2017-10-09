@@ -8,7 +8,7 @@ foreach m : man_pages
 			input : id[0] + '.md',
 			output : m, # e.g.: 'fnvsum.1'
 			build_by_default : true,
-			install : true,
+			install : do_install,
 			command : [ pandoc, '-s', '-t', 'man', '@INPUT@' ],
 			capture : true,
 			install_dir : join_paths(get_option('mandir'), 'man' + id[1])

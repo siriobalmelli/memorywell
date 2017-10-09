@@ -21,6 +21,8 @@ matrix:
           packages:
             - ruby-dev
             - g++-7
+            - pandoc
+            - valgrind
 
     - os: linux
       dist: trusty
@@ -33,6 +35,8 @@ matrix:
           packages:
             - ruby-dev
             - clang-5.0
+            - pandoc
+            - valgrind
 
     - os: osx
       compiler: clang
@@ -91,11 +95,10 @@ before_install:
       pushd ~;
       wget https://www.python.org/ftp/python/3.6.2/Python-3.6.2.tgz;
       tar -xf Python-3.6.2.tgz;
-      pushd Python-3.6.2;
+      cd Python-3.6.2;
       ./configure;
       make -s;
       sudo make install -s;
-      popd;
       popd;
     fi
 

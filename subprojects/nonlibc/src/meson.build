@@ -11,7 +11,7 @@ endif
 nonlibc_shared = shared_library(meson.project_name(),
 			lib_files,
 			include_directories : inc,
-			install : true)
+			install : do_install)
 nonlibc_static = static_library(meson.project_name(),
 			lib_files,
 			include_directories : inc,
