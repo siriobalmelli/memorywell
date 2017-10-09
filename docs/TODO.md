@@ -8,7 +8,8 @@ order: 0
 - describe buid system and test options
 - speed differential if combining cache lines (actual impact of false sharing)?
 - generic nmath functions so 32-bit size_t case is cared for
-- no safety checking or locking on init/deinit; unsure of the best approach here
+- no safety checking or locking on init/deinit - unsure of the best approach here;
+	maybe a strenuous warning to the caller not to shoot themselves in the foot?
 - Python bindings
 - C++ extensions
 - non-contention cost of operations (reserving and releasing buffer blocks

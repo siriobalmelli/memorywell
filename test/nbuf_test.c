@@ -9,7 +9,6 @@
 /* TODO:
 	- yield to a specific thread (eventing) instead of general yield()?
 	- validate reserve and release with '0' size.
-	- increase a "busy-waits" count instead of sched_yield()
 */
 
 
@@ -31,6 +30,7 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 #define SPIN 1
 #define COUNT 2
 #define YIELD 3
+#define SLEEP 4
 
 #ifndef FAIL_METHOD
 #define FAIL_METHOD YIELD
@@ -46,6 +46,12 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 #elif (FAIL_METHOD == YIELD)
 	#define DO_FAIL() sched_yield() /* no scheduling decisions taken by nbuf */
 
+/* Warning: this is horrifyingly slow on my machine */
+#elif (FAIL_METHOD == SLEEP)
+	#include <time.h>
+	const static struct timespec slp = { .tv_sec = 0, .tv_nsec = 1 };
+	#define DO_FAIL() nanosleep(&slp, NULL)
+
 #else
 #error "fail method not implemented"
 #endif
@@ -57,11 +63,14 @@ void *tx_single(void* arg)
 {
 	struct nbuf *nb = arg;
 	size_t tally = 0;
+	size_t num = numiter;
 
 	/* loop on TX */
-	for (size_t i=0, res=0; i < numiter; i += res) {
+	for (size_t i=0, res=0; i < num; i += res) {
+		size_t ask = i + reservation < num ? reservation : num - i;
+
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->tx, &pos, reservation)))
+		while (!(res = nbuf_reserve(&nb->tx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++)
@@ -78,8 +87,10 @@ void *tx_multi(void* arg)
 
 	/* loop on TX */
 	for (size_t i=0, res=0; i < num; i += res) {
+		size_t ask = i + reservation < num ? reservation : num - i;
+
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->tx, &pos, reservation)))
+		while (!(res = nbuf_reserve(&nb->tx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++)
@@ -98,11 +109,14 @@ void *rx_single(void* arg)
 {
 	struct nbuf *nb = arg;
 	size_t tally = 0;
+	size_t num = numiter;
 
 	/* loop on RX */
-	for (size_t i=0, res=0; i < numiter; i += res) {
+	for (size_t i=0, res=0; i < num; i += res) {
+		size_t ask = i + reservation < num ? reservation : num - i;
+
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->rx, &pos, reservation)))
+		while (!(res = nbuf_reserve(&nb->rx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++) {
@@ -121,8 +135,10 @@ void *rx_multi(void* arg)
 
 	/* loop on RX */
 	for (size_t i=0, res=0; i < num; i += res) {
+		size_t ask = i + reservation < num ? reservation : num - i;
+
 		size_t pos;
-		while (!(res = nbuf_reserve(&nb->rx, &pos, reservation)))
+		while (!(res = nbuf_reserve(&nb->rx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++) {

@@ -105,6 +105,38 @@ NOTE that nonlibc is included as a [Git Subtree](https://help.github.com/article
 	if you change anything please commit the nonlibc changes **separately** so
 	they can be merged into the nonlibc repo upstream.
 
+## Benchmarks
+
+After running [boostrap.py](./bootstrap.py), run benchmarks with:
+
+```bash
+cd build-release
+ninja benchmark
+```
+
+Benchmarking is done for a varying counts of TX -> RX threads,
+	and all combinations of the below:
+
+### Sync techniques
+
+To test validity of the underlying algorithm and give comparative metrics,
+	there is a compile-time choice between the following synch techniques:
+
+1. NBUF_DO_XCH	:	entirely implemented using C11 atomics
+1. NBUF_DO_MTX	:	pthread mutex
+1. NBUF_DO_SPL	:	naive spinlock using `test_set` and `clear` operations
+
+### Fail methods
+
+The test routine being used for benchmarking, [nbuf_test.c](test/nbuf_test.c),
+	allows a compile-time choice of actions when a `reserve()` or `release()`
+	call is unsuccessful (no blocks available):
+
+1. SPIN		:	loop until the call is successful
+1. COUNT	:	atomically increment a global `waits` counter
+1. YIELD	:	call `sched_yield()`
+1. SLEEP	:	call `nanosleep()` (currently inactive: takes forever)
+
 ## Support
 
 Communication is always welcome, feel free to send a pull request
