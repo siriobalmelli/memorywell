@@ -6,7 +6,8 @@
 thread_dep = dependency('threads')
 
 tests = [
-  'well_test.c'
+  'well_test.c',
+  'well_validate.c'
 ]
 
 foreach t : tests

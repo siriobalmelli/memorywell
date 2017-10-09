@@ -5,7 +5,6 @@ order: 0
 
 # TODO
 
-- describe buid system and test options
 - speed differential if combining cache lines (actual impact of false sharing)?
 - generic nmath functions so 32-bit size_t case is cared for
 - no safety checking or locking on init/deinit - unsure of the best approach here;
@@ -14,7 +13,7 @@ order: 0
 - C++ extensions
 - non-contention cost of operations (reserving and releasing buffer blocks
 	one by one)
-- validate zero-reserve and zero-release
+- contention-ONLY cost (no operation on underlying memory)
 - example of stack allocation
 - example of underlying file access
 - example of returning data to producers

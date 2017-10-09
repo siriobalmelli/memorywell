@@ -64,7 +64,7 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 */
 void *tx_single(void* arg)
 {
-	struct well *nb = arg;
+	struct well *buf = arg;
 	size_t tally = 0;
 	size_t num = numiter;
 
@@ -73,18 +73,18 @@ void *tx_single(void* arg)
 		size_t ask = i + reservation < num ? reservation : num - i;
 
 		size_t pos;
-		while (!(res = well_reserve(&nb->tx, &pos, ask)))
+		while (!(res = well_reserve(&buf->tx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++)
-			tally += WELL_DEREF(size_t, pos, j, nb) = i + j;
-		well_release_single(&nb->rx, res);
+			tally += WELL_DEREF(size_t, pos, j, buf) = i + j;
+		well_release_single(&buf->rx, res);
 	}
 	return (void *)tally;
 }
 void *tx_multi(void* arg)
 {
-	struct well *nb = arg;
+	struct well *buf = arg;
 	size_t tally = 0;
 	size_t num = numiter / tx_thread_cnt;
 
@@ -93,13 +93,13 @@ void *tx_multi(void* arg)
 		size_t ask = i + reservation < num ? reservation : num - i;
 
 		size_t pos;
-		while (!(res = well_reserve(&nb->tx, &pos, ask)))
+		while (!(res = well_reserve(&buf->tx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++)
-			tally += WELL_DEREF(size_t, pos, j, nb) = i + j;
+			tally += WELL_DEREF(size_t, pos, j, buf) = i + j;
 
-		while (!well_release_multi(&nb->rx, res, pos))
+		while (!well_release_multi(&buf->rx, res, pos))
 			DO_FAIL();
 	}
 	return (void *)tally;
@@ -110,7 +110,7 @@ void *tx_multi(void* arg)
 */
 void *rx_single(void* arg)
 {
-	struct well *nb = arg;
+	struct well *buf = arg;
 	size_t tally = 0;
 	size_t num = numiter;
 
@@ -119,20 +119,20 @@ void *rx_single(void* arg)
 		size_t ask = i + reservation < num ? reservation : num - i;
 
 		size_t pos;
-		while (!(res = well_reserve(&nb->rx, &pos, ask)))
+		while (!(res = well_reserve(&buf->rx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++) {
-			size_t temp = WELL_DEREF(size_t, pos, j, nb);
+			size_t temp = WELL_DEREF(size_t, pos, j, buf);
 			tally += temp;
 		}
-		well_release_single(&nb->tx, res);
+		well_release_single(&buf->tx, res);
 	}
 	return (void *)tally;
 }
 void *rx_multi(void* arg)
 {
-	struct well *nb = arg;
+	struct well *buf = arg;
 	size_t tally = 0;
 	size_t num = numiter / rx_thread_cnt;
 
@@ -141,15 +141,15 @@ void *rx_multi(void* arg)
 		size_t ask = i + reservation < num ? reservation : num - i;
 
 		size_t pos;
-		while (!(res = well_reserve(&nb->rx, &pos, ask)))
+		while (!(res = well_reserve(&buf->rx, &pos, ask)))
 			DO_FAIL();
 
 		for (size_t j=0; j < res; j++) {
-			size_t temp = WELL_DEREF(size_t, pos, j, nb);
+			size_t temp = WELL_DEREF(size_t, pos, j, buf);
 			tally += temp;
 		}
 
-		while (!well_release_multi(&nb->tx, res, pos))
+		while (!well_release_multi(&buf->tx, res, pos))
 			DO_FAIL();
 	}
 	return (void *)tally;
@@ -262,13 +262,13 @@ int main(int argc, char **argv)
 
 
 	/* create buffer */
-	struct well nb = { {0} };
+	struct well buf = { {0} };
 	Z_die_if(
-		well_params(blk_size, blk_cnt, &nb)
+		well_params(blk_size, blk_cnt, &buf)
 		, "");
 	Z_die_if(
-		well_init(&nb, malloc(well_size(&nb)))
-		, "size %zu", well_size(&nb));
+		well_init(&buf, malloc(well_size(&buf)))
+		, "size %zu", well_size(&buf));
 
 	void *(*tx_t)(void *) = tx_single;
 	if (tx_thread_cnt > 1)
@@ -287,9 +287,9 @@ int main(int argc, char **argv)
 	nlc_timing_start(t);
 		/* fire reader-writer threads */
 		for (size_t i=0; i < tx_thread_cnt; i++)
-			pthread_create(&tx[i], NULL, tx_t, &nb);
+			pthread_create(&tx[i], NULL, tx_t, &buf);
 		for (size_t i=0; i < rx_thread_cnt; i++)
-			pthread_create(&rx[i], NULL, rx_t, &nb);
+			pthread_create(&rx[i], NULL, rx_t, &buf);
 
 		/* wait for threads to finish */
 		size_t tx_i_sum = 0, rx_i_sum = 0;
@@ -335,8 +335,8 @@ int main(int argc, char **argv)
 		nlc_timing_cpu(t), nlc_timing_wall(t));
 
 out:
-	well_deinit(&nb);
-	free(nb.ct.buf);
+	well_deinit(&buf);
+	free(well_mem(&buf));
 	free(tx);
 	free(rx);
 	return err_cnt;

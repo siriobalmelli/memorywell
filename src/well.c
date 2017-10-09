@@ -76,9 +76,9 @@ out:
 
 
 /*	well_init()
-Initialize an well struct 'nb' with (caller-allocated) 'mem'.
-This function expects 'nb' to have had well_params() successfully called on it,
-	and for 'mem' to be at least well_size(nb) large.
+Initialize an well struct 'buf' with (caller-allocated) 'mem'.
+This function expects 'buf' to have had well_params() successfully called on it,
+	and for 'mem' to be at least well_size(buf) large.
 
 The reason for this more complicated initialization pattern is to allow
 	caller full control over 'mem' without bringing complexities
@@ -86,21 +86,21 @@ The reason for this more complicated initialization pattern is to allow
 
 returns 0 on success
 */
-int well_init(struct well *nb, void *mem)
+int well_init(struct well *buf, void *mem)
 {
 	int err_cnt = 0;
-	Z_die_if(!nb, "");
-	nb->tx.release_pos = nb->rx.release_pos = 0;
+	Z_die_if(!buf, "");
+	buf->tx.release_pos = buf->rx.release_pos = 0;
 
 	Z_die_if(!mem, "");
-	nb->ct.buf = mem;
+	buf->ct.buf = mem;
 
 
 #if (WELL_TECHNIQUE == WELL_DO_MTX)
-	Z_die_if(pthread_mutex_init(&nb->tx.lock, NULL), "");
-	Z_die_if(pthread_mutex_init(&nb->rx.lock, NULL), "");
+	Z_die_if(pthread_mutex_init(&buf->tx.lock, NULL), "");
+	Z_die_if(pthread_mutex_init(&buf->rx.lock, NULL), "");
 #elif (WELL_TECHNIQUE == WELL_DO_SPL)
-	nb->tx.lock = nb->rx.lock = 0;
+	buf->tx.lock = buf->rx.lock = 0;
 #endif
 
 out:
@@ -110,11 +110,11 @@ out:
 
 /*	well_deinit()
 */
-void well_deinit(struct well *nb)
+void well_deinit(struct well *buf)
 {
 #if (WELL_TECHNIQUE == WELL_DO_MTX)
-	Z_die_if(pthread_mutex_destroy(&nb->tx.lock), "");
-	Z_die_if(pthread_mutex_destroy(&nb->rx.lock), "");
+	Z_die_if(pthread_mutex_destroy(&buf->tx.lock), "");
+	Z_die_if(pthread_mutex_destroy(&buf->rx.lock), "");
 out:
 	return;
 #endif

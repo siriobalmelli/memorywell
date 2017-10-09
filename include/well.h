@@ -76,24 +76,24 @@ struct well_sym {
 /*	well_size()
 Returns the size of the underlying buffer.
 */
-NLC_INLINE size_t well_size(const struct well *nb)
+NLC_INLINE size_t well_size(const struct well *buf)
 {
-	return nb->ct.overflow + 1;
+	return buf->ct.overflow + 1;
 }
 
 /*	well_blk_size()
 Returns the size of one buffer block.
 */
-NLC_INLINE size_t well_blk_size(const struct well *nb)
+NLC_INLINE size_t well_blk_size(const struct well *buf)
 {
-	return nb->ct.blk_size;
+	return buf->ct.blk_size;
 }
 /*	well_blk_count()
 How many blocks in the buffer.
 */
-NLC_INLINE size_t well_blk_count(const struct well *nb)
+NLC_INLINE size_t well_blk_count(const struct well *buf)
 {
-	return well_size(nb) >> nb->ct.blk_shift;
+	return well_size(buf) >> buf->ct.blk_shift;
 }
 
 
@@ -113,10 +113,10 @@ The alternative would be to either:
 		size has changed.
 Both are inefficient.
 */
-NLC_INLINE void *well_access(size_t pos, size_t i, const struct well *nb)
+NLC_INLINE void *well_access(size_t pos, size_t i, const struct well *buf)
 {
-	size_t offt = (pos + i) << nb->ct.blk_shift;
-	return nb->ct.buf + (offt & nb->ct.overflow);
+	size_t offt = (pos + i) << buf->ct.blk_shift;
+	return buf->ct.buf + (offt & buf->ct.overflow);
 }
 
 /*	WELL_DEREF()
@@ -125,7 +125,20 @@ Helper macro to combine an well_access() with a typecast and a dereference;
 It's main purpose is to avoid giving library users cancer when accessing
 	buffers which contain scalar types such as integers or pointers.
 */
-#define WELL_DEREF(type, pos, i, nb) (*((type*)well_access(pos, i, nb)))
+#define WELL_DEREF(type, pos, i, buf) (*((type*)well_access(pos, i, buf)))
+
+/*	well_mem()
+Returns a pointer to the underlying buffer.
+
+DANGER: never use this function to access data inside the buffer;
+	always use well_access() instead.
+This function exists so caller can stash their pointer inside
+	'struct well' without knowing the internals.
+*/
+NLC_INLINE void *well_mem(struct well *buf)
+{
+	return buf->ct.buf;
+}
 
 
 /*
@@ -135,10 +148,10 @@ NLC_PUBLIC int	well_params(	size_t		blk_size,
 				size_t		blk_cnt,
 				struct well	*out);
 
-NLC_PUBLIC int	well_init(	struct well	*nb,
+NLC_PUBLIC int	well_init(	struct well	*buf,
 				void		*mem);
 
-NLC_PUBLIC void	well_deinit(	struct well	*nb);
+NLC_PUBLIC void	well_deinit(	struct well	*buf);
 
 /*
 	reserve
