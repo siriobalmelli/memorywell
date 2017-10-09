@@ -25,3 +25,7 @@ order: 0
 - <https://github.com/Nyufu/LockFreeRingBuffer/blob/master/unittests/EnqueueDequeueOrder4Thread.cpp>
 - <https://github.com/shramov/ring>
 - <https://github.com/ixtli/ringbuffer>
+
+## BUGS
+
+- OS X valgrind anomaly
