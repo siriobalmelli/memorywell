@@ -261,8 +261,9 @@ int main(int argc, char **argv)
 	Z_die_if(numiter > 1000000000, "one billion is plenty thanks");
 
 	/* do MANY less iterations if running under Valgrind! */
-	if (getenv("VALGRIND") && numiter >1000000)
-		numiter = 1000000;
+	const static size_t valgrind_max = 100000;
+	if (getenv("VALGRIND") && numiter >valgrind_max)
+		numiter = valgrind_max;
 
 
 	/* create buffer */
