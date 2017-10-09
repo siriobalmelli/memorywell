@@ -136,6 +136,7 @@ The test routine being used for benchmarking, [nbuf_test.c](test/nbuf_test.c),
 1. COUNT	:	atomically increment a global `waits` counter
 1. YIELD	:	call `sched_yield()`
 1. SLEEP	:	call `nanosleep()` (currently inactive: takes forever)
+1. BOUNDED	:	spinlock a few iterations and `sched_yield()` if still failing
 
 ## Support
 

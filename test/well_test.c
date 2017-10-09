@@ -34,6 +34,7 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 #define SIGNAL 5	/* TODO: implement signaling between threads on each side
 				of the buffer.
 			*/
+#define BOUNDED 6
 
 #ifndef FAIL_METHOD
 #define FAIL_METHOD YIELD
@@ -54,6 +55,10 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 	#include <time.h>
 	const static struct timespec slp = { .tv_sec = 0, .tv_nsec = 1 };
 	#define DO_FAIL() nanosleep(&slp, NULL)
+
+#elif (FAIL_METHOD == BOUNDED)
+	__thread size_t spin_count = 0;
+	#define DO_FAIL() if (spin_count++ > 8) { spin_count=0; sched_yield(); }
 
 #else
 #error "fail method not implemented"

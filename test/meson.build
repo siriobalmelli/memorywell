@@ -47,7 +47,7 @@ endforeach
 techniques = [ 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
 
 foreach t : techniques
-  test_defines = [ 'YIELD', 'COUNT', 'SPIN' ]
+  test_defines = [ 'BOUNDED', 'YIELD', 'COUNT', 'SPIN' ]
   #test_defines = [ 'SLEEP', 'YIELD', 'COUNT', 'SPIN' ]
   foreach def : test_defines
     a_test = executable(t + '-' + def, [ 'well_test.c', '../src/well.c' ],
@@ -62,12 +62,25 @@ foreach t : techniques
 	is_parallel : false)
     endif
 
-    # bench
+    ##
+    # benchmarks!
+    # 
+    # The rationale here is to try and highlight contention and scheduling
+    #	effects by:
+    #
+    #	  - reducing buffer size so it fits in L1 (hide memory effects)
+    #	  - reserving only one block at a time (worst possible contention)
+    #	  - modest number of iterations (suppress noise but don't take forever)
+    #
+    # NOTE that a thread-count above 3 gives 8 effective threads contending
+    #	and has occasional disastrous performance issues for SPIN or COUNT
+    #	implementations running on machines with 4 physical cores.
+    ##
     thread_counts = [ '1', '2', '3' ]
     foreach tx : thread_counts
       foreach rx : thread_counts
 	    benchmark(t + '-' + def + '; ' + tx + '->' + rx, a_test,
-	      args : [ '-c', '1024', '-n', '90000000', '-r', '100', '-t', tx, '-x', rx],
+	      args : [ '-c', '128', '-n', '3000000', '-t', tx, '-x', rx],
 	      timeout: 90)
       endforeach
     endforeach
