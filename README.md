@@ -152,4 +152,4 @@ Hence: **MemoryWell**; your friendly neighborhood circular buffer:
 	- a well from whence to draw memory
 	- a well-implemented circular buffer
 
-## [TODO](docs/TODO.md)
+## le official project [TODO list](docs/TODO.md)
