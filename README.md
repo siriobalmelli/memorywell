@@ -6,7 +6,7 @@ order: 100
 # MemoryWell [![Build Status](https://travis-ci.org/siriobalmelli/MemoryWell.svg?branch=master)](https://travis-ci.org/siriobalmelli/MemoryWell)
 
 Speed up synchronization and motion of data between computing threads:
-	a lock-free circular buffer done right.
+	a well-built lock-free circular buffer.
 
 See these docs:
 

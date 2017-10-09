@@ -1,0 +1,11 @@
+---
+theme: jekyll-theme-minimal
+
+# exclude:
+
+title: 'memorywell'
+description: 'well-built lock-free circular buffer'
+
+markdown: kramdown
+repository: siriobalmelli/memorywell
+...
