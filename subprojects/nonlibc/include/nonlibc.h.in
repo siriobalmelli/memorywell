@@ -10,6 +10,13 @@ This header file exports defines and macros to clean up ugly code and abstract
 
 
 
+/*
+	compile-time defines populated by build system
+*/
+#mesondefine NLC_CACHE_LINE
+
+
+
 /*	compile-time checks (size, etc)
 A macro to allow for compile-time checks where the CPP is missing info,
 	such as sizeof().
