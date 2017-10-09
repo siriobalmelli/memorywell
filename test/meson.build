@@ -55,10 +55,12 @@ foreach t : techniques
 			dependencies : [ deps, thread_dep ],
 			c_args : [ '-DFAIL_METHOD=' + def, '-DWELL_TECHNIQUE=' + t])
 
-    # test only the multithreaded case
-    test(t + '-' + def + '; 2->2', a_test,
-      args : [ '-c', '1024', '-n', '90000000', '-r', '100', '-t', '2', '-x', '2'],
-      is_parallel : false)
+    # test only the multithreaded case for XCH
+    if t == 'WELL_DO_XCH' and def == 'YIELD'
+      test(t + '-' + def + '; 2->2', a_test,
+	args : [ '-c', '1024', '-n', '90000000', '-r', '100', '-t', '2', '-x', '2'],
+	is_parallel : false)
+    endif
 
     # bench
     thread_counts = [ '1', '2', '3' ]
