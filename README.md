@@ -3,15 +3,15 @@ title: MemoryWell
 order: 100
 ---
 
-# MemoryWell [![Build Status](https://travis-ci.org/siriobalmelli/MemoryWell.svg?branch=master)](https://travis-ci.org/siriobalmelli/MemoryWell)
+# MemoryWell [![Build Status](https://travis-ci.org/siriobalmelli/memorywell.svg?branch=master)](https://travis-ci.org/siriobalmelli/memorywell)
 
 Speed up synchronization and motion of data between computing threads:
 	a well-built lock-free circular buffer.
 
 See these docs:
 
--	[on Github](https://github.com/siriobalmelli/MemoryWell)
--	[as a web page](https://siriobalmelli.github.io/MemoryWell/)
+-	[on Github](https://github.com/siriobalmelli/memorywell)
+-	[as a web page](https://siriobalmelli.github.io/memorywell/)
 
 ## How So? Pray tell
 
