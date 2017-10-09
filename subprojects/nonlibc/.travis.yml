@@ -4,7 +4,6 @@
 #+  and running tests on our code. I assume that on your computer you have already
 #+  your preferred compiler to the latest stable version or python3.
 # The only thing here that is distro-specific (ubuntu) and you might miss is
-#+  package `ruby-dev`.
 
 language: c
 sudo: required
@@ -19,7 +18,6 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
           packages:
-            - ruby-dev
             - g++-7
             - pandoc
             - valgrind
@@ -33,7 +31,6 @@ matrix:
             - ubuntu-toolchain-r-test
             - llvm-toolchain-trusty-5.0
           packages:
-            - ruby-dev
             - clang-5.0
             - pandoc
             - valgrind

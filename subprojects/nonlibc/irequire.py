@@ -89,23 +89,6 @@ templates = {
 				"requires" : [ "brew" ],
 				"cmd_list" : [ [ "brew", "install", "{pkg_name}" ] ]
 			},
-			"gem-nosudo" : {
-				"platform" : [ "linux", "darwin" ],
-				"requires" : [ "gem" ],
-				"cmd_list" : [ 
-					[ "gem", "install", "rubygems-update" ],
-					[ "gem", "install", "{pkg_name}" ] 
-				]
-			},
-			"gem" : {
-				"platform" : [ "linux", "darwin" ],
-				"requires" : [ "gem" ],
-				"cmd_list" : [ 
-					[ "sudo", "gem", "update", "--system" ],
-					[ "sudo", "gem", "install", "rubygems-update" ],
-					[ "sudo", "gem", "install", "{pkg_name}" ] 
-				]
-			},
 			"pip3" : {
 				"platform" : [ "linux", "darwin" ],
 				"requires" : [ "pip3" ],
