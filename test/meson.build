@@ -72,9 +72,10 @@ foreach t : techniques
     #	  - reserving only one block at a time (worst possible contention)
     #	  - modest number of iterations (suppress noise but don't take forever)
     #
-    # NOTE that a thread-count above 3 gives 8 effective threads contending
-    #	and has occasional disastrous performance issues for SPIN or COUNT
-    #	implementations running on machines with 4 physical cores.
+    # NOTE there are occational disastrous performance issues running SPIN or COUNT
+    #	versions for a *total* thread-count of `system_cpu_count + 2`.
+    # For example on a 2-core hyperthreading machine (system_cpu_count = 4),
+    #	the highest sane thread-count is 4+2=6; which means 3 TX and 3 RX.
     ##
     thread_counts = [ '1', '2', '3' ]
     foreach tx : thread_counts
