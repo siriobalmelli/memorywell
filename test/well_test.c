@@ -37,7 +37,7 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 #define BOUNDED 6
 
 #ifndef FAIL_METHOD
-#define FAIL_METHOD YIELD
+#define FAIL_METHOD BOUNDED /* OS X scheduler seems to dislike yield() */
 #endif
 
 #if (FAIL_METHOD == SPIN)
