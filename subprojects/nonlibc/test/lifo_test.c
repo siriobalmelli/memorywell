@@ -50,7 +50,7 @@ int main()
 	/* do MUCH less work if VALGRIND environment variable is set */
 	int shifts = 4;
 	if (!(getenv("VALGRIND")))
-		shifts = 21;
+		shifts = 20;
 
 	LIFO_MEM_TYPE numiter = 128;
 	for (int i=0; i < shifts; i++, numiter <<= 1) {
