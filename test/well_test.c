@@ -28,7 +28,7 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 	allow compiling with different wait strategies
 */
 #define SPIN 1
-#define COUNT 2
+#define COUNT 2		/* No longer implemented: was just a shitty spin */
 #define YIELD 3
 #define SLEEP 4
 #define SIGNAL 5	/* TODO: implement signaling between threads on each side
@@ -37,28 +37,33 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 #define BOUNDED 6
 
 #ifndef FAIL_METHOD
-#define FAIL_METHOD YIELD
+#define FAIL_METHOD BOUNDED
 #endif
 
+/* Warning: unsafe for high thread counts! */
 #if (FAIL_METHOD == SPIN)
-	#define DO_FAIL() /* do nothing - spinlock! */
-
-#elif (FAIL_METHOD == COUNT)
 	static size_t waits = 0; /* how many times did threads wait? */
-	#define DO_FAIL() __atomic_add_fetch(&waits, 1, __ATOMIC_RELAXED)
+	__thread size_t wait_count = 0;
+	#define FAIL_DO() wait_count++
+	#define FAIL_END() __atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED)
 
 #elif (FAIL_METHOD == YIELD)
-	#define DO_FAIL() sched_yield() /* no scheduling decisions taken by well */
+	#define FAIL_DO() sched_yield() /* no scheduling decisions taken by well */
+	#define FAIL_END()
 
 /* Warning: this is horrifyingly slow on my machine */
 #elif (FAIL_METHOD == SLEEP)
 	#include <time.h>
 	const static struct timespec slp = { .tv_sec = 0, .tv_nsec = 1 };
-	#define DO_FAIL() nanosleep(&slp, NULL)
+	#define FAIL_DO() nanosleep(&slp, NULL)
+	#define FAIL_END()
 
 #elif (FAIL_METHOD == BOUNDED)
-	__thread size_t spin_count = 0;
-	#define DO_FAIL() if (spin_count++ > 8) { spin_count=0; sched_yield(); }
+	static size_t waits = 0; /* how many times did threads wait? */
+	__thread size_t wait_count = 0;
+	/* spin only 8 iterations, then yield() */
+	#define FAIL_DO() if (!(++wait_count & 0x7)) { sched_yield(); }
+	#define FAIL_END() __atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED)
 
 #else
 #error "fail method not implemented"
@@ -79,12 +84,14 @@ void *tx_single(void* arg)
 
 		size_t pos;
 		while (!(res = well_reserve(&buf->tx, &pos, ask)))
-			DO_FAIL();
+			FAIL_DO();
 
 		for (size_t j=0; j < res; j++)
 			tally += WELL_DEREF(size_t, pos, j, buf) = i + j;
 		well_release_single(&buf->rx, res);
 	}
+
+	FAIL_END();
 	return (void *)tally;
 }
 void *tx_multi(void* arg)
@@ -99,14 +106,16 @@ void *tx_multi(void* arg)
 
 		size_t pos;
 		while (!(res = well_reserve(&buf->tx, &pos, ask)))
-			DO_FAIL();
+			FAIL_DO();
 
 		for (size_t j=0; j < res; j++)
 			tally += WELL_DEREF(size_t, pos, j, buf) = i + j;
 
 		while (!well_release_multi(&buf->rx, res, pos))
-			DO_FAIL();
+			FAIL_DO();
 	}
+
+	FAIL_END();
 	return (void *)tally;
 }
 
@@ -125,7 +134,7 @@ void *rx_single(void* arg)
 
 		size_t pos;
 		while (!(res = well_reserve(&buf->rx, &pos, ask)))
-			DO_FAIL();
+			FAIL_DO();
 
 		for (size_t j=0; j < res; j++) {
 			size_t temp = WELL_DEREF(size_t, pos, j, buf);
@@ -133,6 +142,8 @@ void *rx_single(void* arg)
 		}
 		well_release_single(&buf->tx, res);
 	}
+
+	FAIL_END();
 	return (void *)tally;
 }
 void *rx_multi(void* arg)
@@ -147,7 +158,7 @@ void *rx_multi(void* arg)
 
 		size_t pos;
 		while (!(res = well_reserve(&buf->rx, &pos, ask)))
-			DO_FAIL();
+			FAIL_DO();
 
 		for (size_t j=0; j < res; j++) {
 			size_t temp = WELL_DEREF(size_t, pos, j, buf);
@@ -155,8 +166,10 @@ void *rx_multi(void* arg)
 		}
 
 		while (!well_release_multi(&buf->tx, res, pos))
-			DO_FAIL();
+			FAIL_DO();
 	}
+
+	FAIL_END();
 	return (void *)tally;
 }
 
@@ -338,7 +351,7 @@ int main(int argc, char **argv)
 		numiter, blk_size, blk_cnt, reservation);
 	printf("TX threads %zu; RX threads %zu\n",
 		tx_thread_cnt, rx_thread_cnt);
-#if (FAIL_METHOD == COUNT)
+#if (FAIL_METHOD == SPIN || FAIL_METHOD == BOUNDED)
 	printf("waits: %zu\n", waits);
 #endif
 	printf("cpu time %.4lfs; wall time %.4lfs\n",

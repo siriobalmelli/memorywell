@@ -63,17 +63,17 @@ Here is a thread reserving blocks and writing data into them:
 ```c
 void *producer_thread_single(void *args)
 {
-	struct nbuf *buffer = args;
+	struct well *buffer = args;
 
 	/* go through every buffer block */
-	size_t blk_count = nbuf_blk_count(buffer);
+	size_t blk_count = well_blk_count(buffer);
 	for (size_t i=0, res=0; i < blk_count; i += res) {
 		/* Get a reservation of __at_most__ 42 blocks,
 			may return a smaller number if a smaller number is available.
 		Returns 0 if no block available.
 		*/
 		size_t pos;
-		while (!(res = nbuf_reserve(&buffer->tx, &pos, 42)))
+		while (!(res = well_reserve(&buffer->tx, &pos, 42)))
 			sched_yield();	/* No scheduling decisions are taken by the library.
 							We could spin or sleep() or wait for a semaphore here,
 								or become a consumer and read from the 'rx'
@@ -85,14 +85,14 @@ void *producer_thread_single(void *args)
 			of the buffer and some may have looped back to the beginning.
 		*/
 		for (size_t j=0; j < res; j++) {
-			void *block = nbuf_access(pos, j, buffer);
-			memset(block, 0x1, nbuf_blk_size(buffer));
+			void *block = well_access(pos, j, buffer);
+			memset(block, 0x1, well_blk_size(buffer));
 		}
 
 		/* Release reservation into the other side of the buffer.
 		We reserved from 'tx' and so release into 'rx'.
 		*/
-		nbuf_release_single(&buffer->rx, res);
+		well_release_single(&buffer->rx, res);
 	}
 }
 ```
@@ -131,17 +131,17 @@ The previous code example, to become multi-threaded, need only change
 ```c
 void *producer_thread_multi(void *args)
 {
-	struct nbuf *buffer = args;
+	struct well *buffer = args;
 
-	size_t blk_count = nbuf_blk_count(buffer);
+	size_t blk_count = well_blk_count(buffer);
 	for (size_t i=0, res=0; i < blk_count; i += res) {
 		size_t pos;
-		while (!(res = nbuf_reserve(&buffer->tx, &pos, 32)))
+		while (!(res = well_reserve(&buffer->tx, &pos, 32)))
 			sched_yield();
 
 		for (size_t j=0; j < res; j++) {
-			void *block = nbuf_access(pos, j, buffer);
-			memset(block, 0x1, nbuf_blk_size(buffer));
+			void *block = well_access(pos, j, buffer);
+			memset(block, 0x1, well_blk_size(buffer));
 		}
 
 		/* Release reservation.
@@ -150,7 +150,7 @@ void *producer_thread_multi(void *args)
 			to ensure other side of the buffer does
 			not see unfinished data.
 		*/
-		while (!nbuf_release_multi(&buffer->rx, res, pos))
+		while (!well_release_multi(&buffer->rx, res, pos))
 			sched_yield();
 	}
 }
@@ -164,16 +164,16 @@ Here is code to set up and initialize a buffer:
 
 ```c
 	int ret =0;
-	struct nbuf buffer = { {0} };
+	struct well buffer = { {0} };
 
 	/* Calculate buffer dimensions (blocks must be a power of 2).
 	'blk_size' and 'blk_count' are previously set to arbitrary values
 		that make sense for this particular program.
 	*/
-	ret = nbuf_params(blk_size, blk_count, &nb);
+	ret = well_params(blk_size, blk_count, &nb);
 
 	/* allocate memory for the buffer and initialize it */
-	ret += nbuf_init(&nb, malloc(nbuf_size(&nb)));
+	ret += well_init(&nb, malloc(well_size(&nb)));
 
 	if (ret)
 		; /* error handling here */

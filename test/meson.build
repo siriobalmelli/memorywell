@@ -44,10 +44,10 @@ endforeach
 ##
 #	some tests are sometimes benchmarks ;)
 ##
-techniques = [ 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
+techniques = [ 'WELL_DO_CAS', 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
 
 foreach t : techniques
-  test_defines = [ 'BOUNDED', 'YIELD', 'COUNT', 'SPIN' ]
+  test_defines = [ 'BOUNDED', 'YIELD' ]
   #test_defines = [ 'SLEEP', 'YIELD', 'COUNT', 'SPIN' ]
   foreach def : test_defines
     a_test = executable(t + '-' + def, [ 'well_test.c', '../src/well.c' ],
@@ -76,7 +76,7 @@ foreach t : techniques
     #	and has occasional disastrous performance issues for SPIN or COUNT
     #	implementations running on machines with 4 physical cores.
     ##
-    thread_counts = [ '1', '2', '3' ]
+    thread_counts = [ '1', '2', '3', '4' ]
     foreach tx : thread_counts
       foreach rx : thread_counts
 	    benchmark(t + '-' + def + '; ' + tx + '->' + rx, a_test,
