@@ -20,10 +20,11 @@ If you plan on reviewing or contributing to the project,
 ## Premise
 
 Moving data between computing threads usually involves:
-	- allocating memory
-	- writing allocated memory
-	- synchronizing: passing a pointer to that memory between threads
-	- releasing memory once finished
+
+- allocating memory
+- writing allocated memory
+- synchronizing: passing a pointer to that memory between threads
+- releasing memory once finished
 
 The performance and scaling bottlenecks lie in allocation and synchronization.
 
@@ -104,14 +105,16 @@ The "consumer" thread on the other side would be nearly identical,
 ### Multiple producers/consumers
 
 There are 2 distinct types of synchronization/contention:
-	- between TX (producer) thread(s) and RX (consumer) thread(s).
-	- between multiple threads on one **side** (either TX or RX) of the buffer.
+
+- between TX (producer) thread(s) and RX (consumer) thread(s).
+- between multiple threads on one **side** (either TX or RX) of the buffer.
 
 For this reason, buffers/queues are usually referred to as:
-	- SPSC: Single Producer, Single Consumer
-	- SPMC: Single Producer, Multiple Consumer
-	- MPSC: Mulitple Producer, Single Consumer
-	- MPMC: Multiple Producer, Multiple Consumer
+
+- SPSC: Single Producer, Single Consumer
+- SPMC: Single Producer, Multiple Consumer
+- MPSC: Mulitple Producer, Single Consumer
+- MPMC: Multiple Producer, Multiple Consumer
 
 The design of this library is such that `reserve()` is already safe
 	whether used by single or multiple producer/consumer thread(s).
@@ -224,8 +227,9 @@ The parameters used in `access()` are in yet a third cache line,
 The memory pointed to by the buffer structure is **never** dereferenced or accessed.
 
 This is an advantage when performing zero-copy I/O into and out of the buffer:
-	- no page faults are taken
-	- no data prefetch is triggered into cache
+
+- no page faults are taken
+- no data prefetch is triggered into cache
 
 **TODO:**link to `nmem`
 
