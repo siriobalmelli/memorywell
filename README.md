@@ -30,25 +30,25 @@ Here is a simplified look at the steps involved:
 */
 void *writer_thread(void *args)
 {
-	struct nbuf *buffer = args;
+	struct well *buffer = args;
 
 	/* Reserve up any number of available blocks, up to 42 */
 	size_t pos;
-	size_t block_count = nbuf_reserve(&buffer->tx, &pos, 42);
+	size_t block_count = well_reserve(&buffer->tx, &pos, 42);
 
 	/* Write into blocks.
 	NOTE we access blocks one at a time: our set of reserved blocks could
 		start at the end of the buffer and loop through the beginning.
 	*/
 	for (size_t j=0; j < block_count; j++) {
-		void *block = nbuf_access(pos, j, buffer);
-		memset(block, 0x1, nbuf_blk_size(buffer));
+		void *block = well_access(pos, j, buffer);
+		memset(block, 0x1, well_blk_size(buffer));
 	}
 
 	/* Release reservation into the other side of the buffer.
 	We reserved from 'tx' and so release into 'rx'.
 	*/
-	nbuf_release_single(&buffer->rx, res);
+	well_release_single(&buffer->rx, res);
 }
 ```
 
@@ -61,21 +61,21 @@ The "reader" thread would be identical, except it accesses the opposite "side"
 */
 void *reader_thread(void *args)
 {
-	struct nbuf *buffer = args;
+	struct well *buffer = args;
 
 	/* Reserve up any number of available blocks, up to 42 */
 	size_t pos;
-	size_t block_count = nbuf_reserve(&buffer->rx, &pos, 42);
+	size_t block_count = well_reserve(&buffer->rx, &pos, 42);
 
 	/* Read from blocks */
 	for (size_t j=0; j < block_count; j++)
-		consume_data(nbuf_access(pos, j, buffer));
+		consume_data(well_access(pos, j, buffer));
 
 	/* Release data back to 'tx' side (aka: unused, ready to be written).
 	NOTE the buffer is **symmetrical**: we could also have written new data
 		back into it, which the 'tx' side would then read.
 	*/
-	nbuf_release_single(&buffer->tx, res);
+	well_release_single(&buffer->tx, res);
 }
 ```
 
@@ -122,13 +122,13 @@ Benchmarking is done for a varying counts of TX -> RX threads,
 To test validity of the underlying algorithm and give comparative metrics,
 	there is a compile-time choice between the following synch techniques:
 
-1. NBUF_DO_XCH	:	entirely implemented using C11 atomics
-1. NBUF_DO_MTX	:	pthread mutex
-1. NBUF_DO_SPL	:	naive spinlock using `test_set` and `clear` operations
+1. WELL_DO_XCH	:	entirely implemented using C11 atomics
+1. WELL_DO_MTX	:	pthread mutex
+1. WELL_DO_SPL	:	naive spinlock using `test_set` and `clear` operations
 
 ### Fail methods
 
-The test routine being used for benchmarking, [nbuf_test.c](test/nbuf_test.c),
+The test routine being used for benchmarking, [well_test.c](test/well_test.c),
 	allows a compile-time choice of actions when a `reserve()` or `release()`
 	call is unsuccessful (no blocks available):
 

@@ -1,13 +1,14 @@
 #ifndef config_h_in_
 #define config_h_in_
 
-#mesondefine NBUF_DO_CAS
-#mesondefine NBUF_DO_XCH
-#mesondefine NBUF_DO_MTX
-#mesondefine NBUF_DO_SPL
+#mesondefine WELL_DO_CAS
+#mesondefine WELL_DO_XCH
+#mesondefine WELL_DO_MTX
+#mesondefine WELL_DO_SPL
 
-#ifndef NBUF_TECHNIQUE
-#mesondefine NBUF_TECHNIQUE
+/* allow build to override default technique */
+#ifndef WELL_TECHNIQUE
+#mesondefine WELL_TECHNIQUE
 #endif
 
 #endif /* config_h_in_ */

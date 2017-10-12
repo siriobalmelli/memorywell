@@ -139,7 +139,21 @@ size_t well_reserve(struct well_sym	*from,
 			size_t		*out_pos,
 			size_t		max_count)
 {
-#if (WELL_TECHNIQUE == WELL_DO_XCH)
+#if (WELL_TECHNIQUE == WELL_DO_CAS)
+	/* fail early and cheaply */
+	size_t count = __atomic_load_n(&from->avail, __ATOMIC_RELAXED);
+	do {
+		if (!count)
+			return 0;
+		if (count < max_count)
+			max_count = count;
+	} while (!(__atomic_compare_exchange_n(&from->avail, &count, count - max_count,
+						1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)));
+	*out_pos = __atomic_fetch_add(&from->pos, max_count, __ATOMIC_RELAXED);
+	return max_count;
+
+
+#elif (WELL_TECHNIQUE == WELL_DO_XCH)
 	size_t count = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
 	if (!count)
 		return 0;
@@ -154,7 +168,9 @@ size_t well_reserve(struct well_sym	*from,
 
 #elif (WELL_TECHNIQUE == WELL_DO_MTX || WELL_TECHNIQUE == WELL_DO_SPL)
 	size_t ret = 0;
-	if (!TRYLOCK_(&from->lock)) {
+	/* fail early if possible */
+	if (from->avail) {
+		LOCK_(&from->lock);
 		if (from->avail) {
 			if (from->avail < max_count) {
 				max_count = from->avail;
@@ -190,7 +206,7 @@ NOTE RE LOCKING: this function will always succeed;
 void well_release_single(struct well_sym	*to,
 				size_t		count)
 {
-#if (WELL_TECHNIQUE == WELL_DO_XCH)
+#if (WELL_TECHNIQUE == WELL_DO_CAS || WELL_TECHNIQUE == WELL_DO_XCH)
 	__atomic_add_fetch(&to->avail, count, __ATOMIC_RELEASE);
 
 
@@ -222,7 +238,7 @@ size_t	well_release_multi(struct well_sym	*to,
 				size_t		count,
 				size_t		res_pos)
 {
-#if (WELL_TECHNIQUE == WELL_DO_XCH)
+#if (WELL_TECHNIQUE == WELL_DO_CAS || WELL_TECHNIQUE == WELL_DO_XCH)
 	if (!__atomic_compare_exchange_n(&to->release_pos, &res_pos, res_pos + count,
 					0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
 		return 0;
@@ -233,7 +249,9 @@ size_t	well_release_multi(struct well_sym	*to,
 
 #elif (WELL_TECHNIQUE == WELL_DO_MTX || WELL_TECHNIQUE == WELL_DO_SPL)
 	size_t ret = 0;
-	if (!TRYLOCK_(&to->lock)) {
+	/* fail early if possible */
+	if (to->release_pos == res_pos) {
+		LOCK_(&to->lock);
 		if (to->release_pos == res_pos) {
 			to->avail += count;
 			to->release_pos += count;

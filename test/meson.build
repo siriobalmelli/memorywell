@@ -44,11 +44,10 @@ endforeach
 ##
 #	some tests are sometimes benchmarks ;)
 ##
-techniques = [ 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
+techniques = [ 'WELL_DO_CAS', 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
 
 foreach t : techniques
-  test_defines = [ 'BOUNDED', 'YIELD', 'COUNT', 'SPIN' ]
-  #test_defines = [ 'SLEEP', 'YIELD', 'COUNT', 'SPIN' ]
+  test_defines = [ 'BOUNDED', 'YIELD' ]
   foreach def : test_defines
     a_test = executable(t + '-' + def, [ 'well_test.c', '../src/well.c' ],
 			include_directories : inc,
