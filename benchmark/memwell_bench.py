@@ -113,7 +113,9 @@ threads = col.OrderedDict()
 
 #threads and the avgs_* dicts are both indexed by the benchmark run id 
 
-def summate_runs(runs):
+#threads and the avgs_* dicts are both indexed by the benchmark run id 
+
+def  summate_runs(runs):
 	for k,v in runs.items():
 		for s in v:
 			# s[1] is the number of the benchmark run out of X runs
