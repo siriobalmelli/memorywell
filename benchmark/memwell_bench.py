@@ -4,6 +4,22 @@ import re
 import subprocess
 import collections as col
 
+def current_commit():
+    '''returns the current git commit; or dies
+    '''
+    # get current git commit; ergo must run inside repo
+    try:
+        sub = subprocess.run([ 'git', 'rev-parse', '--short', 'HEAD' ],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            shell=False, check=True);
+    except subprocess.CalledProcessError as err:
+        print(err.cmd)
+        print(err.stdout.decode('ascii'))
+        print(err.stderr.decode('ascii'))
+        exit(1)
+
+    return sub.stdout.decode('ascii').strip()
+
 rex = re.compile('(([0-9]+)\/([0-9]+))\s(\S+)\s([0-9]+)->([0-9]+)', re.MULTILINE)
 rex1 = re.compile('^(cpu time\s[0-9]+\.[0-9]+)s;\s(wall time [0-9]+\.[0-9]+)s', re.MULTILINE)
 
@@ -23,7 +39,7 @@ def run_benchmark():
 	# Can only be run from the build dir
 	# Check if build dir???
     try:
-	    sub = subprocess.run(['ninja benchmark', 'benchmark'],
+	    sub = subprocess.run(['ninja benchmark'],
 		                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                              shell=True, check=True)
 	    #print(sub.stdout.decode('ascii'))
@@ -52,54 +68,141 @@ def parse_file(filename):
 
 dd = col.OrderedDict()
 import statistics as st
+threads = col.OrderedDict()
 
-def summate_runs(runs):
+#threads and the avgs_* dicts are both indexed by the benchmark run id 
+
+def  summate_runs(runs):
 	for k,v in runs.items():
+		for s in v:
+			threads[int(s[1])] = int(s[4]) + int(s[5])
 		for k,v in v.items():
+			#key is a tuple of benchmark id + process name
+			key = tuple([threads[int(k[1])], k[3]])
 			if k[1] not in dd.keys():
-				dd[k[1]] = [( k, v )]
+				dd[key] = [( k, v )]
 			else:
-				dd[k[1]].append((k, v))
+				dd[key].append((k, v))
 	
 	avgs_wall = col.OrderedDict()
 	avgs_cpu = col.OrderedDict()
+	key = ()
 	for k,v in dd.items():
 		for line in v:
+			#print(v[0][0][3])
 			for l in line:
+				if len(l) >= 3:
+					key = tuple([threads[k[0]], l[3]])
 				if 'wall time' in l[1]:
 					if k in avgs_wall.keys():
-						avgs_wall[k].append(float(str.split(l[1])[2]))
+						avgs_wall[key].append(float(str.split(l[1])[2]))
 					else:
-						avgs_wall[k] =  [ float(str.split(l[1])[2]) ]
+						avgs_wall[key] = [ float(str.split(l[1])[2]) ]
 				if 'cpu time' in l[0]:
-					print(str.split(l[0])[2])
 					if k in avgs_cpu.keys():
-						avgs_cpu[k].append(float(str.split(l[1])[2]))
+						avgs_cpu[key].append(float(str.split(l[1])[2]))
 					else:
-						avgs_cpu[k] = [ float(str.split(l[1])[2]) ]
+						avgs_cpu[key] = [ float(str.split(l[1])[2]) ]
 	
-	avgs_cpu1 = col.OrderedDict({ k: st.mean(v) for k, v in avgs_cpu.items() })
-	avgs_wall1 = col.OrderedDict({ k: st.mean(v) for k, v in avgs_wall.items() })
+	avgs_cpu1 = col.OrderedDict({ k: round(st.mean(v), 3) for k, v in avgs_cpu.items() })
+	avgs_wall1 = col.OrderedDict({ k: round(st.mean(v), 3) for k, v in avgs_wall.items() })
 
-	for k,v in avgs_cpu1.items():
-		print(k)
-		print(v)
+#	for k,v in avgs_cpu1.items():
+#		print(k)
+#		print(v)
+
+	return avgs_cpu1, avgs_wall1
+#	for k,v in avgs_wall1.items():
+#		print(k)
+#		print(v)
+
+#(('1/48', '1', '48', 'WELL_DO_XCH-BOUNDED;', '1', '1'), ('cpu time 0.6633', 'wall time 0.3321'))
+
+# Do not use Xwindows;
+#+  needs to be called before pyplot is imported
+import matplotlib 
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt 
+
+
+#Need two arrays: cpu_times, threads 
+def make_plots(cpu_time, threads, chart_suffix):
+	#make a list of all 'chart_name' charts
+	charts = col.OrderedDict()
+	charts['XCH'] = []
+	charts['MTX'] = []
+	charts['SPL'] = []
+	for k,v in cpu_time.items():
+		found = k[1].find(chart_suffix)
+		if found > 0:
+			if 'WELL_DO_XCH' in k[1]:
+				charts['XCH'].append(tuple([k[0],v]))
+			if 'WELL_DO_MTX' in k[1]:
+				charts['MTX'].append(tuple([k[0],v]))
+			if 'WELL_DO_SPL' in k[1]:
+				charts['SPL'].append(tuple([k[0],v]))
 	
-	for k,v in avgs_wall1.items():
-		print(k)
-  		print(v)
+	#for each chart (mtx, xch and spl) and I need a line on the plot
+	lin_y_mtx = col.OrderedDict()
+	lin_y_xch = col.OrderedDict()
+	lin_y_spl = col.OrderedDict()
+	for k,v in charts.items():
+		for l in v:
+			print(l)
+			# make a y axis for each chart
+			if k == 'MTX':
+				lin_y_mtx[l[0]] = l[1]
+			if k == 'XCH':
+				lin_y_xch[l[0]] = l[1]
+			if k == 'SPL':
+				lin_y_spl[l[0]] = l[1]
+	
+	print(lin_y_xch)
+	commit_id = current_commit()
+	lin_x = [ i for i in range(min(lin_y_mtx.keys())-1, max(lin_y_mtx.keys())+2) ]
+	_, ax = plt.subplots()
+	
+	ax.set_xlabel('threads')
+	ax.set_xticks(lin_x, minor=False)
+	ax.set_xticklabels(lin_x)
+	all_values = []
+	all_values.extend(lin_y_mtx.values())
+	all_values.extend(lin_y_xch.values())
+	all_values.extend(lin_y_spl.values())
+	y_min = min(all_values)
+	y_max = max(all_values) 
+	step = (y_max - y_min) / 5 
+	ticks = [ round(y_min + step * i,3) for i in range(5) ]
+	ax.set_ylabel('cpu time')
+	ax.set_yticks(ticks, minor=True)
+	ax.set_yticklabels(ticks)
+	
+	x1 = [ i for i in lin_y_mtx.keys() ]
+	y1 = [ i for i in lin_y_mtx.values() ]
+	x2 = [ i for i in lin_y_xch.keys() ]
+	y2 = [ i for i in lin_y_xch.values() ]
+	x3 = [ i for i in lin_y_spl.keys() ]
+	y3 = [ i for i in lin_y_spl.values() ]
 
-def get_threads(runs):
-	pass
+	plt.plot(x1,y1, 'b-', x2, y2, 'g-', x3, y3, 'r-')
+	plt.legend(['blue = MTX', 'green = XCH', 'red = SPL'], loc='upper right')
+	plt.axis(xmin = min(lin_x), xmax = max(lin_x), ymin = y_min, ymax = y_max)
+	plt.savefig('{0} - {1} - {2}.pdf'.format(commit_id, 'CPU Time', chart_suffix), dpi=600, papertype='a4', orientation='landscape')
 
 def main():
 	filename = 'meson-logs/benchmarklog.txt'
 	#filename = 'foo.txt'
 	runs = col.OrderedDict()
-	for i in range(0, 2):
-		run_benchmark()
+	for i in range(0, 1):
+#		print(i)
+#		run_benchmark()
 		runs[i] = parse_file(filename)
 	
-	summate_runs(runs)
+	avgs_cpu, avgs_wall = summate_runs(runs)
+	
+	make_plots(avgs_cpu, threads, '-BOUNDED;')
+	make_plots(avgs_cpu, threads, '-YIELD;')
+	make_plots(avgs_cpu, threads, '-COUNT;')
+	make_plots(avgs_cpu, threads, '-SPIN;')
 if __name__ == "__main__":
 	main()
