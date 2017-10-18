@@ -94,12 +94,12 @@ def  summate_runs(runs):
 				if len(l) >= 3:
 					key = tuple([threads[k[0]], l[3]])
 				if 'wall time' in l[1]:
-					if k in avgs_wall.keys():
+					if key in avgs_wall.keys():
 						avgs_wall[key].append(float(str.split(l[1])[2]))
 					else:
 						avgs_wall[key] = [ float(str.split(l[1])[2]) ]
 				if 'cpu time' in l[0]:
-					if k in avgs_cpu.keys():
+					if key in avgs_cpu.keys():
 						avgs_cpu[key].append(float(str.split(l[1])[2]))
 					else:
 						avgs_cpu[key] = [ float(str.split(l[1])[2]) ]
@@ -171,8 +171,8 @@ def make_plots(cpu_time, threads, chart_suffix):
 	all_values.extend(lin_y_spl.values())
 	y_min = min(all_values)
 	y_max = max(all_values) 
-	step = (y_max - y_min) / 5 
-	ticks = [ round(y_min + step * i,3) for i in range(5) ]
+	step = (y_max - y_min) / 10 
+	ticks = [ round(y_min + step * i,3) for i in range(10) ]
 	ax.set_ylabel('cpu time')
 	ax.set_yticks(ticks, minor=True)
 	ax.set_yticklabels(ticks)
@@ -193,9 +193,9 @@ def main():
 	filename = 'meson-logs/benchmarklog.txt'
 	#filename = 'foo.txt'
 	runs = col.OrderedDict()
-	for i in range(0, 1):
-#		print(i)
-#		run_benchmark()
+	for i in range(0, 10):
+		print(i)
+		run_benchmark()
 		runs[i] = parse_file(filename)
 	
 	avgs_cpu, avgs_wall = summate_runs(runs)
