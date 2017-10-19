@@ -168,9 +168,7 @@ size_t well_reserve(struct well_sym	*from,
 
 #elif (WELL_TECHNIQUE == WELL_DO_MTX || WELL_TECHNIQUE == WELL_DO_SPL)
 	size_t ret = 0;
-	/* fail early if possible */
-	if (from->avail) {
-		LOCK_(&from->lock);
+	if (!TRYLOCK_(&from->lock)) {
 		if (from->avail) {
 			if (from->avail < max_count) {
 				max_count = from->avail;
@@ -249,9 +247,7 @@ size_t	well_release_multi(struct well_sym	*to,
 
 #elif (WELL_TECHNIQUE == WELL_DO_MTX || WELL_TECHNIQUE == WELL_DO_SPL)
 	size_t ret = 0;
-	/* fail early if possible */
-	if (to->release_pos == res_pos) {
-		LOCK_(&to->lock);
+	if (!TRYLOCK_(&to->lock)) {
 		if (to->release_pos == res_pos) {
 			to->avail += count;
 			to->release_pos += count;
