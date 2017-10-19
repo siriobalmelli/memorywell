@@ -266,6 +266,24 @@ def parse_opts(opts):
 	
 	return iterations
 
+import sys, getopt
+
+def print_usage():
+	print('./memwell_bench -r <number of benchmark iterations>')
+
+def parse_opts(opts):
+	iterations = 5
+	for o, arg in opts:
+		if o in ('-r', '--runs'):
+			iterations = int(arg)
+		elif o in ('-h', '--help'):
+			print_usage()
+			sys.exit(0)
+		else:
+			print('no such option')
+	
+	return iterations
+
 def main():
 	filename = 'meson-logs/benchmarklog.txt'
 	runs = col.OrderedDict()
