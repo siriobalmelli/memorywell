@@ -29,9 +29,8 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
-            - llvm-toolchain-trusty-5.0
           packages:
-            - clang-5.0
+            - clang
             - pandoc
             - valgrind
 
@@ -71,6 +70,18 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
       brew update;
       brew install python3;
+    fi
+
+  # This is the only effective way I found to set the compiler to the desired version.
+
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then
+      if [[ "$CC" == "gcc" ]]; then
+        CC=gcc-7;
+        CXX=g++-7;
+      elif [[ "$CC" == "clang" ]]; then
+        CC=clang;
+        CXX=clang++;
+      fi
     fi
 
 # There is nothing more then python3.4 in trusty repo while we need >= 3.5
