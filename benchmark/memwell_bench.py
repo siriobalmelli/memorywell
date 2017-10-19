@@ -20,10 +20,10 @@ def current_commit():
 
     return sub.stdout.decode('ascii').strip()
 
-rex = re.compile('(([0-9]+)\/([0-9]+))\s(\S+)\s([0-9]+)->([0-9]+)', re.MULTILINE)
+rex = re.compile('(([0-9]+)\/([0-9]+))\s(\S+)\s([0-9]+)->([0-9]+)\s+OK', re.MULTILINE)
 rex1 = re.compile('^(cpu time\s[0-9]+\.[0-9]+)s;\s(wall time [0-9]+\.[0-9]+)s', re.MULTILINE)
 
-def run_meson(option_value):
+def run_meson_configure(option_value):
 	# run meson configure 
     try:
 	    subprocess.run(['meson', 'configure', '-Dthreads={}'.format(option_value)],
@@ -34,7 +34,27 @@ def run_meson(option_value):
                print(err.stdout.decode('ascii'))
                print(err.stderr.decode('ascii'))
                exit(1)
+
+rex_option = re.compile('.*threads ([0-9]+)', re.DOTALL)
+
+def read_threads_option():
+    try:
+	    sub = subprocess.run(['meson', 'configure'],
+		                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             shell=False, check=True)
+    except subprocess.CalledProcessError as err:
+               print(err.cmd)
+               print(err.stdout.decode('ascii'))
+               print(err.stderr.decode('ascii'))
+               exit(1)
 	
+    print(sub.stdout.decode('ascii'))
+    m = rex_option.match(sub.stdout.decode('ascii'))
+    if m:
+       return int(m.group(1))
+    else:
+       print('no match')
+
 def run_benchmark():
 	# Can only be run from the build dir
 	# Check if build dir???
@@ -63,7 +83,7 @@ def parse_file(filename):
 			d[a] = b
 	else:
 		print('no regex match!')
-	
+
 	return d
 
 dd = col.OrderedDict()
@@ -84,7 +104,7 @@ def summate_runs(runs):
 				dd[key] = [( k, v )]
 			else:
 				dd[key].append((k, v))
-	
+
 	avgs_wall = col.OrderedDict()
 	avgs_cpu = col.OrderedDict()
 	key = ()
@@ -128,7 +148,7 @@ import matplotlib.pyplot as plt
 
 
 #Need two arrays: cpu_times, threads 
-def make_plots(cpu_time, threads, chart_suffix):
+def make_plots(cpu_time, chart_suffix):
 	#make a list of all 'chart_name' charts
 	charts = col.OrderedDict()
 	charts['XCH'] = []
@@ -143,7 +163,7 @@ def make_plots(cpu_time, threads, chart_suffix):
 				charts['MTX'].append(tuple([k[0],v]))
 			if 'WELL_DO_SPL' in k[1]:
 				charts['SPL'].append(tuple([k[0],v]))
-	
+		
 	#for each chart (mtx, xch and spl) and I need a line on the plot
 	lin_y_mtx = col.OrderedDict()
 	lin_y_xch = col.OrderedDict()
@@ -157,7 +177,7 @@ def make_plots(cpu_time, threads, chart_suffix):
 				lin_y_xch[l[0]] = l[1]
 			if k == 'SPL':
 				lin_y_spl[l[0]] = l[1]
-	
+
 	commit_id = current_commit()
 	lin_x = [ i for i in range(min(lin_y_mtx.keys())-1, max(lin_y_mtx.keys())+2) ]
 	_, ax = plt.subplots()
@@ -169,18 +189,20 @@ def make_plots(cpu_time, threads, chart_suffix):
 	all_values.extend(lin_y_mtx.values())
 	all_values.extend(lin_y_xch.values())
 	all_values.extend(lin_y_spl.values())
+	all_values.sort()
 	y_min = min(all_values)
 	y_max = max(all_values) 
-	step = (y_max - y_min) / 10 
+	step = (y_max - y_min) / 10
 	ticks = [ round(y_min + step * i,3) for i in range(10) ]
 	ax.set_ylabel('cpu time')
-	ax.set_yticks(ticks, minor=True)
+	ax.set_yticks(ticks, minor=False)
 	ax.set_yticklabels(ticks)
 
 	# make sure the arrays are sorted by the thread count (keys)
 	lin_y_mtx_sorted = col.OrderedDict(sorted(lin_y_mtx.items(), key=lambda item: item))
 	lin_y_xch_sorted = col.OrderedDict(sorted(lin_y_xch.items(), key=lambda item: item))
 	lin_y_spl_sorted = col.OrderedDict(sorted(lin_y_spl.items(), key=lambda item: item))
+	print(lin_y_spl_sorted)
 	x1 = [ i for i in lin_y_mtx_sorted.keys() ]
 	y1 = [ i for i in lin_y_mtx_sorted.values() ]
 	x2 = [ i for i in lin_y_xch_sorted.keys() ]
@@ -196,16 +218,20 @@ def make_plots(cpu_time, threads, chart_suffix):
 def main():
 	filename = 'meson-logs/benchmarklog.txt'
 	runs = col.OrderedDict()
-	for i in range(0, 10):
-		print(i)
-		run_benchmark()
+
+#	option_threads = read_threads_option()
+#	print(option_threads)
+	for i in range(0, 1):
+#		print(i)
+#		run_benchmark()
 		runs[i] = parse_file(filename)
 	
 	avgs_cpu, avgs_wall = summate_runs(runs)
-	
-	make_plots(avgs_cpu, threads, '-BOUNDED;')
-	make_plots(avgs_cpu, threads, '-YIELD;')
-	make_plots(avgs_cpu, threads, '-COUNT;')
-	make_plots(avgs_cpu, threads, '-SPIN;')
+
+	make_plots(avgs_wall, '-BOUNDED;')
+	make_plots(avgs_wall, '-YIELD;')
+	make_plots(avgs_wall, '-COUNT;')
+	make_plots(avgs_wall, '-SPIN;')
+
 if __name__ == "__main__":
 	main()
