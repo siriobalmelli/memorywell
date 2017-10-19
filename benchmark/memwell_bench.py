@@ -72,9 +72,10 @@ threads = col.OrderedDict()
 
 #threads and the avgs_* dicts are both indexed by the benchmark run id 
 
-def  summate_runs(runs):
+def summate_runs(runs):
 	for k,v in runs.items():
 		for s in v:
+			# s[1] is the number of the benchmark run out of X runs
 			threads[int(s[1])] = int(s[4]) + int(s[5])
 		for k,v in v.items():
 			#key is a tuple of benchmark id + process name
@@ -92,7 +93,8 @@ def  summate_runs(runs):
 			#print(v[0][0][3])
 			for l in line:
 				if len(l) >= 3:
-					key = tuple([threads[k[0]], l[3]])
+					# key is number of threads, process name
+					key = tuple([k[0], l[3]])
 				if 'wall time' in l[1]:
 					if key in avgs_wall.keys():
 						avgs_wall[key].append(float(str.split(l[1])[2]))
@@ -148,7 +150,6 @@ def make_plots(cpu_time, threads, chart_suffix):
 	lin_y_spl = col.OrderedDict()
 	for k,v in charts.items():
 		for l in v:
-			print(l)
 			# make a y axis for each chart
 			if k == 'MTX':
 				lin_y_mtx[l[0]] = l[1]
@@ -157,7 +158,6 @@ def make_plots(cpu_time, threads, chart_suffix):
 			if k == 'SPL':
 				lin_y_spl[l[0]] = l[1]
 	
-	print(lin_y_xch)
 	commit_id = current_commit()
 	lin_x = [ i for i in range(min(lin_y_mtx.keys())-1, max(lin_y_mtx.keys())+2) ]
 	_, ax = plt.subplots()
@@ -176,13 +176,17 @@ def make_plots(cpu_time, threads, chart_suffix):
 	ax.set_ylabel('cpu time')
 	ax.set_yticks(ticks, minor=True)
 	ax.set_yticklabels(ticks)
-	
-	x1 = [ i for i in lin_y_mtx.keys() ]
-	y1 = [ i for i in lin_y_mtx.values() ]
-	x2 = [ i for i in lin_y_xch.keys() ]
-	y2 = [ i for i in lin_y_xch.values() ]
-	x3 = [ i for i in lin_y_spl.keys() ]
-	y3 = [ i for i in lin_y_spl.values() ]
+
+	# make sure the arrays are sorted by the thread count (keys)
+	lin_y_mtx_sorted = col.OrderedDict(sorted(lin_y_mtx.items(), key=lambda item: item))
+	lin_y_xch_sorted = col.OrderedDict(sorted(lin_y_xch.items(), key=lambda item: item))
+	lin_y_spl_sorted = col.OrderedDict(sorted(lin_y_spl.items(), key=lambda item: item))
+	x1 = [ i for i in lin_y_mtx_sorted.keys() ]
+	y1 = [ i for i in lin_y_mtx_sorted.values() ]
+	x2 = [ i for i in lin_y_xch_sorted.keys() ]
+	y2 = [ i for i in lin_y_xch_sorted.values() ]
+	x3 = [ i for i in lin_y_spl_sorted.keys() ]
+	y3 = [ i for i in lin_y_spl_sorted.values() ]
 
 	plt.plot(x1,y1, 'b-', x2, y2, 'g-', x3, y3, 'r-')
 	plt.legend(['blue = MTX', 'green = XCH', 'red = SPL'], loc='upper right')
@@ -191,7 +195,6 @@ def make_plots(cpu_time, threads, chart_suffix):
 
 def main():
 	filename = 'meson-logs/benchmarklog.txt'
-	#filename = 'foo.txt'
 	runs = col.OrderedDict()
 	for i in range(0, 10):
 		print(i)
