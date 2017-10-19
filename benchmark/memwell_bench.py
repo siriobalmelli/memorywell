@@ -142,7 +142,6 @@ def  summate_runs(runs):
 						avgs_ops[key].append(int(l[0]))
 					else:
 						avgs_ops[key] = [ int(l[0]) ]
-
 	avgs_ops1 = col.OrderedDict({ k : st.mean(v) for k,v in avgs_ops.items() })
 #	print(avgs_ops)	
 	return avgs_ops1
