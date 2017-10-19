@@ -154,6 +154,7 @@ def make_plots(cpu_time, chart_suffix, y_label_name):
 	charts['XCH'] = []
 	charts['MTX'] = []
 	charts['SPL'] = []
+	charts['CAS'] = []
 	for k,v in cpu_time.items():
 		found = k[1].find(chart_suffix)
 		if found > 0:
@@ -162,12 +163,15 @@ def make_plots(cpu_time, chart_suffix, y_label_name):
 			if 'WELL_DO_MTX' in k[1]:
 				charts['MTX'].append(tuple([k[0],v]))
 			if 'WELL_DO_SPL' in k[1]:
-				charts['SPL'].append(tuple([k[0],v]))
-		
+				charts['SPL'].append(tuple([k[0],v]))	
+			if 'WELL_DO_CAS' in k[1]:
+				charts['CAS'].append(tuple([k[0],v]))
+
 	#for each chart (mtx, xch and spl) and I need a line on the plot
 	lin_y_mtx = col.OrderedDict()
 	lin_y_xch = col.OrderedDict()
 	lin_y_spl = col.OrderedDict()
+	lin_y_cas = col.OrderedDict()
 	for k,v in charts.items():
 		for l in v:
 			# make a y axis for each chart
@@ -177,7 +181,9 @@ def make_plots(cpu_time, chart_suffix, y_label_name):
 				lin_y_xch[l[0]] = l[1]
 			if k == 'SPL':
 				lin_y_spl[l[0]] = l[1]
-
+			if k == 'CAS':
+				lin_y_cas[l[0]] = l[1]
+	
 	commit_id = current_commit()
 	lin_x = [ i for i in range(min(lin_y_mtx.keys())-1, max(lin_y_mtx.keys())+2) ]
 	_, ax = plt.subplots()
@@ -189,6 +195,7 @@ def make_plots(cpu_time, chart_suffix, y_label_name):
 	all_values.extend(lin_y_mtx.values())
 	all_values.extend(lin_y_xch.values())
 	all_values.extend(lin_y_spl.values())
+	all_values.extend(lin_y_cas.values())
 	all_values.sort()
 	y_min = min(all_values)
 	y_max = max(all_values) 
@@ -202,40 +209,73 @@ def make_plots(cpu_time, chart_suffix, y_label_name):
 	lin_y_mtx_sorted = col.OrderedDict(sorted(lin_y_mtx.items(), key=lambda item: item))
 	lin_y_xch_sorted = col.OrderedDict(sorted(lin_y_xch.items(), key=lambda item: item))
 	lin_y_spl_sorted = col.OrderedDict(sorted(lin_y_spl.items(), key=lambda item: item))
-	print(lin_y_spl_sorted)
+	lin_y_cas_sorted = col.OrderedDict(sorted(lin_y_cas.items(), key=lambda item: item))
 	x1 = [ i for i in lin_y_mtx_sorted.keys() ]
 	y1 = [ i for i in lin_y_mtx_sorted.values() ]
 	x2 = [ i for i in lin_y_xch_sorted.keys() ]
 	y2 = [ i for i in lin_y_xch_sorted.values() ]
 	x3 = [ i for i in lin_y_spl_sorted.keys() ]
 	y3 = [ i for i in lin_y_spl_sorted.values() ]
+	x4 = [ i for i in lin_y_cas_sorted.keys() ]
+	y4 = [ i for i in lin_y_cas_sorted.values() ]
 
-	plt.plot(x1,y1, 'b-', x2, y2, 'g-', x3, y3, 'r-')
-	plt.legend(['blue = MTX', 'green = XCH', 'red = SPL'], loc='upper right')
+	plt.plot(x1,y1, 'b-', x2, y2, 'g-', x3, y3, 'r-', x4,y4, 'y-')
+	plt.legend(['blue = MTX', 'green = XCH', 'red = SPL', 'yellow = CAS'], loc='upper right')
 	plt.axis(xmin = min(lin_x), xmax = max(lin_x), ymin = y_min, ymax = y_max)
 	plt.savefig('{0} - {1} {2}.pdf'.format(commit_id, y_label_name, chart_suffix), dpi=600, papertype='a4', orientation='landscape')
+
+
+import sys, getopt
+
+def print_usage():
+	print('./memwell_bench -r <number of benchmark iterations>')
+
+def parse_opts(opts):
+	iterations = 5
+	for o, arg in opts:
+		if o in ('-r', '--runs'):
+			iterations = int(arg)
+		elif o in ('-h', '--help'):
+			print_usage()
+			sys.exit(0)
+		else:
+			print('no such option')
+	
+	return iterations
 
 def main():
 	filename = 'meson-logs/benchmarklog.txt'
 	runs = col.OrderedDict()
 
+# parse options
+	try:
+		opts, args = getopt.getopt(sys.argv[1:], "r:h", ["runs=","help"])
+	except getopt.GetoptError as err:
+		print(err)
+		print_usage()
+		sys.exit(1)
+	
+	iterations = parse_opts(opts)
+
+	print('running {0} iterations'.format(iterations))
+
 #	option_threads = read_threads_option()
 #	print(option_threads)
-	for i in range(0, 3):
+	for i in range(0, iterations):
 		print(i)
 		run_benchmark()
 		runs[i] = parse_file(filename)
 	
 	avgs_cpu, avgs_wall = summate_runs(runs)
-
+	
 	make_plots(avgs_wall, '-BOUNDED;', 'wall time')
 	make_plots(avgs_wall, '-YIELD;', 'wall time')
-	make_plots(avgs_wall, '-COUNT;', 'wall time')
-	make_plots(avgs_wall, '-SPIN;', 'wall time')
+#	make_plots(avgs_wall, '-COUNT;', 'wall time')
+#	make_plots(avgs_wall, '-SPIN;', 'wall time')
 
 	make_plots(avgs_cpu, '-BOUNDED;', 'cpu time')
 	make_plots(avgs_cpu, '-YIELD;', 'cpu time')
-	make_plots(avgs_cpu, '-COUNT;', 'cpu time')
-	make_plots(avgs_cpu, '-SPIN;', 'cpu time')
+#	make_plots(avgs_cpu, '-COUNT;', 'cpu time')
+#	make_plots(avgs_cpu, '-SPIN;', 'cpu time')
 if __name__ == "__main__":
 	main()
