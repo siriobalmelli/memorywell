@@ -148,7 +148,7 @@ import matplotlib.pyplot as plt
 
 
 #Need two arrays: cpu_times, threads 
-def make_plots(cpu_time, chart_suffix):
+def make_plots(cpu_time, chart_suffix, y_label_name):
 	#make a list of all 'chart_name' charts
 	charts = col.OrderedDict()
 	charts['XCH'] = []
@@ -194,7 +194,7 @@ def make_plots(cpu_time, chart_suffix):
 	y_max = max(all_values) 
 	step = (y_max - y_min) / 10
 	ticks = [ round(y_min + step * i,3) for i in range(10) ]
-	ax.set_ylabel('cpu time')
+	ax.set_ylabel(y_label_name)
 	ax.set_yticks(ticks, minor=False)
 	ax.set_yticklabels(ticks)
 
@@ -213,7 +213,7 @@ def make_plots(cpu_time, chart_suffix):
 	plt.plot(x1,y1, 'b-', x2, y2, 'g-', x3, y3, 'r-')
 	plt.legend(['blue = MTX', 'green = XCH', 'red = SPL'], loc='upper right')
 	plt.axis(xmin = min(lin_x), xmax = max(lin_x), ymin = y_min, ymax = y_max)
-	plt.savefig('{0} - {1} - {2}.pdf'.format(commit_id, 'CPU Time', chart_suffix), dpi=600, papertype='a4', orientation='landscape')
+	plt.savefig('{0} - {1} {2}.pdf'.format(commit_id, y_label_name, chart_suffix), dpi=600, papertype='a4', orientation='landscape')
 
 def main():
 	filename = 'meson-logs/benchmarklog.txt'
@@ -221,17 +221,21 @@ def main():
 
 #	option_threads = read_threads_option()
 #	print(option_threads)
-	for i in range(0, 10):
+	for i in range(0, 3):
 		print(i)
 		run_benchmark()
 		runs[i] = parse_file(filename)
 	
 	avgs_cpu, avgs_wall = summate_runs(runs)
 
-	make_plots(avgs_wall, '-BOUNDED;')
-	make_plots(avgs_wall, '-YIELD;')
-	make_plots(avgs_wall, '-COUNT;')
-	make_plots(avgs_wall, '-SPIN;')
+	make_plots(avgs_wall, '-BOUNDED;', 'wall time')
+	make_plots(avgs_wall, '-YIELD;', 'wall time')
+	make_plots(avgs_wall, '-COUNT;', 'wall time')
+	make_plots(avgs_wall, '-SPIN;', 'wall time')
 
+	make_plots(avgs_cpu, '-BOUNDED;', 'cpu time')
+	make_plots(avgs_cpu, '-YIELD;', 'cpu time')
+	make_plots(avgs_cpu, '-COUNT;', 'cpu time')
+	make_plots(avgs_cpu, '-SPIN;', 'cpu time')
 if __name__ == "__main__":
 	main()
