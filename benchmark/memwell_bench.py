@@ -293,6 +293,5 @@ def main():
 	make_plots(avgs_ops, '_YIELD', 'operations')
 	make_plots(avgs_ops, '_SPIN', 'operations')
 	make_plots(avgs_ops, '_SLEEP', 'operations')
-
 if __name__ == "__main__":
 	main()
