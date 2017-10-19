@@ -212,7 +212,6 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	y_min = min(powers_of_ten)
 	y_max = max(powers_of_ten)
 	ax.set_ylabel('operations per second')
-
 	# make sure the arrays are sorted by the thread count (keys)
 	lin_y_mtx_sorted = col.OrderedDict(sorted(lin_y_mtx.items(), key=lambda item: item))
 	lin_y_xch_sorted = col.OrderedDict(sorted(lin_y_xch.items(), key=lambda item: item))
