@@ -221,9 +221,9 @@ def main():
 
 #	option_threads = read_threads_option()
 #	print(option_threads)
-	for i in range(0, 1):
-#		print(i)
-#		run_benchmark()
+	for i in range(0, 10):
+		print(i)
+		run_benchmark()
 		runs[i] = parse_file(filename)
 	
 	avgs_cpu, avgs_wall = summate_runs(runs)
