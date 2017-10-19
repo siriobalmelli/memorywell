@@ -122,9 +122,9 @@ def summate_runs(runs):
 						avgs_wall[key] = [ float(str.split(l[1])[2]) ]
 				if 'cpu time' in l[0]:
 					if key in avgs_cpu.keys():
-						avgs_cpu[key].append(float(str.split(l[1])[2]))
+						avgs_cpu[key].append(float(str.split(l[0])[2]))
 					else:
-						avgs_cpu[key] = [ float(str.split(l[1])[2]) ]
+						avgs_cpu[key] = [ float(str.split(l[0])[2]) ]
 	
 	avgs_cpu1 = col.OrderedDict({ k: round(st.mean(v), 3) for k, v in avgs_cpu.items() })
 	avgs_wall1 = col.OrderedDict({ k: round(st.mean(v), 3) for k, v in avgs_wall.items() })
@@ -259,8 +259,6 @@ def main():
 
 	print('running {0} iterations'.format(iterations))
 
-#	option_threads = read_threads_option()
-#	print(option_threads)
 	for i in range(0, iterations):
 		print(i)
 		run_benchmark()
@@ -270,12 +268,8 @@ def main():
 	
 	make_plots(avgs_wall, '-BOUNDED;', 'wall time')
 	make_plots(avgs_wall, '-YIELD;', 'wall time')
-#	make_plots(avgs_wall, '-COUNT;', 'wall time')
-#	make_plots(avgs_wall, '-SPIN;', 'wall time')
 
 	make_plots(avgs_cpu, '-BOUNDED;', 'cpu time')
 	make_plots(avgs_cpu, '-YIELD;', 'cpu time')
-#	make_plots(avgs_cpu, '-COUNT;', 'cpu time')
-#	make_plots(avgs_cpu, '-SPIN;', 'cpu time')
 if __name__ == "__main__":
 	main()
