@@ -5,32 +5,27 @@ order: 0
 
 # TODO
 
-These are in order by priority:
+- speed differential if combining cache lines (actual impact of false sharing)?
+- generic nmath functions so 32-bit size_t case is cared for
+- no safety checking or locking on init/deinit - unsure of the best approach here;
+	maybe a strenuous warning to the caller not to shoot themselves in the foot?
+- Python bindings
+- C++ extensions
+- non-contention cost of operations (reserving and releasing buffer blocks
+	one by one)
+- contention-ONLY cost (no operation on underlying memory)
+- example of stack allocation
+- example of underlying file access
+- example of returning data to producers
+- example of using zero-copy I/O (split nmem from nonlibc?)
+- man pages
 
--	overloaded size_t functions for nmath
--	clean up staticity, const'ness, purity; add to hacking tips and visibility macros?
--	add library to WrapDB; submit to Meson site for inclusion
--	man pages
--	integrate code coverage testing
--	code optional replacements for required libc calls (e.g.: on ARM) ?
--	evaluate licensing - is GPL2 the least restrictive?
--	*view* any source files linked in the documentation (with syntax highlight),
-		don't try and download it (facepalm)
--	Move option parsing to Argp ... which likely means meson-wrapping it
-		since it doesn't come standard with LibC on all systems?!
+## Benchmark against other implementations
 
-## TODO: lifo
+- <https://github.com/Nyufu/LockFreeRingBuffer/blob/master/unittests/EnqueueDequeueOrder4Thread.cpp>
+- <https://github.com/shramov/ring>
+- <https://github.com/ixtli/ringbuffer>
 
--	slow on Darwin ;(
-		(lack of mremap getting me down)
+## BUGS
 
-## TODO: bootstrap.py
-
--	document
--	building on windows
-
-## TODO: man pages
-
--	nmem(3)
--	fnv(3)
--	n_dirname(3); n_basename(3); n_join(3)
+- OS X valgrind anomaly

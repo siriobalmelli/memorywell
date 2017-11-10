@@ -29,8 +29,9 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
+            - llvm-toolchain-trusty-5.0
           packages:
-            - clang
+            - clang-5.0
             - pandoc
             - valgrind
 
@@ -79,8 +80,8 @@ before_install:
         CC=gcc-7;
         CXX=g++-7;
       elif [[ "$CC" == "clang" ]]; then
-        CC=clang;
-        CXX=clang++;
+        CC=clang-5.0;
+        CXX=clang++-5.0;
       fi
     fi
 

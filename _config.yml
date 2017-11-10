@@ -1,11 +1,12 @@
 ---
 theme: jekyll-theme-minimal
 
-# exclude:
+exclude:
+  - subprojects
 
-title: 'nonlibc'
-description: 'Utilties for the discerning C programmer'
+title: 'memorywell'
+description: 'well-built lock-free circular buffer'
 
 markdown: kramdown
-repository: siriobalmelli/nonlibc
+repository: siriobalmelli/memorywell
 ...
