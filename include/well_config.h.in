@@ -1,6 +1,10 @@
 #ifndef config_h_in_
 #define config_h_in_
 
+
+/*
+	contention strategies
+*/
 #mesondefine WELL_DO_CAS
 #mesondefine WELL_DO_XCH
 #mesondefine WELL_DO_MTX
@@ -10,5 +14,20 @@
 #ifndef WELL_TECHNIQUE
 #mesondefine WELL_TECHNIQUE
 #endif
+
+
+/*
+	failure strategies
+*/
+#mesondefine WELL_FAIL_SPIN
+#mesondefine WELL_FAIL_YIELD
+#mesondefine WELL_FAIL_SLEEP
+#mesondefine WELL_FAIL_SIGNAL
+#mesondefine WELL_FAIL_BOUNDED
+
+#ifndef WELL_FAIL_METHOD
+#mesondefine WELL_FAIL_METHOD
+#endif
+
 
 #endif /* config_h_in_ */

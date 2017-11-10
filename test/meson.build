@@ -42,47 +42,19 @@ endforeach
 
 
 ##
-#	some tests are sometimes benchmarks ;)
+#	test all threading combinations for all contention techniques
 ##
 techniques = [ 'WELL_DO_CAS', 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
+base_args = [ '-c', '1024', '-n', '18000000', '-r', '100' ]
 
 foreach t : techniques
-  test_defines = [ 'BOUNDED', 'YIELD' ]
-  foreach def : test_defines
-    a_test = executable(t + '-' + def, [ 'well_test.c', '../src/well.c' ],
-			include_directories : inc,
-			dependencies : [ deps, thread_dep ],
-			c_args : [ '-DFAIL_METHOD=' + def, '-DWELL_TECHNIQUE=' + t])
+  a_test = executable(t, [ 'well_test.c', '../src/well.c' ],
+		      include_directories : inc,
+		      dependencies : [ deps, thread_dep ],
+		      c_args : [ '-DWELL_TECHNIQUE=' + t])
 
-    # test only the multithreaded case for XCH
-    if t == 'WELL_DO_XCH' and def == 'YIELD'
-      test(t + '-' + def + '; 2->2', a_test,
-	args : [ '-c', '1024', '-n', '90000000', '-r', '100', '-t', '2', '-x', '2'],
-	is_parallel : false)
-    endif
-
-    ##
-    # benchmarks!
-    # 
-    # The rationale here is to try and highlight contention and scheduling
-    #	effects by:
-    #
-    #	  - reducing buffer size so it fits in L1 (hide memory effects)
-    #	  - reserving only one block at a time (worst possible contention)
-    #	  - modest number of iterations (suppress noise but don't take forever)
-    #
-    # NOTE there are occational disastrous performance issues running SPIN or COUNT
-    #	versions for a *total* thread-count of `system_cpu_count + 2`.
-    # For example on a 2-core hyperthreading machine (system_cpu_count = 4),
-    #	the highest sane thread-count is 4+2=6; which means 3 TX and 3 RX.
-    ##
-    thread_counts = [ '1', '2', '3' ]
-    foreach tx : thread_counts
-      foreach rx : thread_counts
-	    benchmark(t + '-' + def + '; ' + tx + '->' + rx, a_test,
-	      args : [ '-c', '128', '-n', '3000000', '-t', tx, '-x', rx],
-	      timeout: 90)
-      endforeach
-    endforeach
-  endforeach
+  test(t + ' ' + '1->1', a_test, args : base_args + ['-t', '1', '-x', '1'], is_parallel : false)
+  test(t + ' ' + '1->2', a_test, args : base_args + ['-t', '1', '-x', '2'], is_parallel : false)
+  test(t + ' ' + '2->1', a_test, args : base_args + ['-t', '2', '-x', '1'], is_parallel : false)
+  test(t + ' ' + '2->2', a_test, args : base_args + ['-t', '2', '-x', '2'], is_parallel : false)
 endforeach
