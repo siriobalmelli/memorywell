@@ -4,7 +4,7 @@
 techniques = [ 'WELL_DO_CAS', 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
 fail_strat = [ 'WELL_FAIL_SPIN', 'WELL_FAIL_YIELD', 'WELL_FAIL_SLEEP', 'WELL_FAIL_BOUNDED' ]
 
-thread_counts = [ '0', '1', '2', '4', '8', '16', '32' ]
+thread_counts = [ '0', '1', '2', '4', '8', '16' ]
 
 foreach t : techniques
   foreach d : fail_strat

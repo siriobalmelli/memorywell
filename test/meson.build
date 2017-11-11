@@ -45,7 +45,7 @@ endforeach
 #	test all threading combinations for all contention techniques
 ##
 techniques = [ 'WELL_DO_CAS', 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
-base_args = [ '-c', '1024', '-n', '18000000', '-r', '100' ]
+base_args = [ '-c', '1024', '-n', '9000000', '-r', '100' ]
 
 foreach t : techniques
   a_test = executable(t, [ 'well_test.c', '../src/well.c' ],
