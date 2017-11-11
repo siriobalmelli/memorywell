@@ -55,12 +55,12 @@ out:
 void *tx_single(void* arg)
 {
 	struct well *buf = arg;
-	volatile size_t tally = 0;
+	size_t tally = 0;
 	size_t pos;
 
 	/* loop on TX */
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
-		while (!well_reserve(&buf->tx, &pos, 1)) {
+		if (!well_reserve(&buf->tx, &pos, 1)) {
 			FAIL_DO();
 			continue;
 		}
@@ -75,14 +75,14 @@ void *tx_single(void* arg)
 void *tx_multi(void* arg)
 {
 	struct well *buf = arg;
-	volatile size_t tally = 0;
+	size_t tally = 0;
 	size_t pos;
 
 	nice(2);
 
 	/* loop on TX */
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
-		while (!well_reserve(&buf->tx, &pos, 1)) {
+		if (!well_reserve(&buf->tx, &pos, 1)) {
 			FAIL_DO();
 			continue;
 		}
