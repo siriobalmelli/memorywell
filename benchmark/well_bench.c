@@ -7,6 +7,8 @@
 #include <getopt.h>
 #include <nonlibc.h> /* timing */
 
+#include<sys/time.h>
+#include<signal.h>
 
 static size_t waits = 0; /* how many times did threads wait? */
 static int kill_flag = 0;
@@ -159,6 +161,11 @@ Options:\n\
 }
 
 
+void sigalarm_handler(void)
+{
+	__atomic_store_n(&kill_flag, 1, __ATOMIC_RELEASE);
+}
+
 /*	main()
 */
 int main(int argc, char **argv)
@@ -232,14 +239,26 @@ int main(int argc, char **argv)
 			threads[i*2+1].func = rx_multi;
 		}
 	}
+	
+	/* set up timer, and signal handler */
+	struct itimerval it_val;
+
+	/* When SIGALRM is triggered, call 'sigalarm_handler' */
+	Z_die_if ((signal(SIGALRM, (void (*)(int)) sigalarm_handler) == SIG_ERR),
+		 "unable to catch SIGALRM");
+	
+	it_val.it_value.tv_sec = seconds;
+	it_val.it_value.tv_usec = (seconds%1000000);
+	it_val.it_interval = it_val.it_value;
 
 	/* run, dos, run */
 	nlc_timing_start(t);
 		for (size_t t=0; t < exec_threads; t++)
 			pthread_create(&threads[t].thread, NULL, threads[t].func, &buf);
 
-		sleep(seconds);
-		__atomic_store_n(&kill_flag, 1, __ATOMIC_RELEASE);
+		/* set timer */
+		Z_die_if((setitimer(ITIMER_REAL, &it_val, NULL) == -1), 
+			"error calling setitimer");
 
 		size_t tally =0;
 		for (size_t t=0; t < exec_threads; t++) {
