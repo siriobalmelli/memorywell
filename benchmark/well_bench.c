@@ -55,13 +55,15 @@ out:
 void *tx_single(void* arg)
 {
 	struct well *buf = arg;
-	size_t tally = 0;
+	volatile size_t tally = 0;
 	size_t pos;
 
 	/* loop on TX */
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
-		while (!well_reserve(&buf->tx, &pos, 1))
+		while (!well_reserve(&buf->tx, &pos, 1)) {
 			FAIL_DO();
+			continue;
+		}
 		WELL_DEREF(size_t, pos, 0, buf) = tally++;
 		well_release_single(&buf->rx, 1);
 	}
@@ -73,13 +75,17 @@ void *tx_single(void* arg)
 void *tx_multi(void* arg)
 {
 	struct well *buf = arg;
-	size_t tally = 0;
+	volatile size_t tally = 0;
 	size_t pos;
+
+	nice(2);
 
 	/* loop on TX */
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
-		while (!well_reserve(&buf->tx, &pos, 1))
+		while (!well_reserve(&buf->tx, &pos, 1)) {
 			FAIL_DO();
+			continue;
+		}
 		WELL_DEREF(size_t, pos, 0, buf) = tally++;
 		while (!well_release_multi(&buf->rx, 1, pos))
 			FAIL_DO();
@@ -119,6 +125,8 @@ void *rx_multi(void* arg)
 	size_t tally = 0;
 	volatile size_t consume;
 	size_t pos;
+
+	nice(2);
 
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
 		if (!well_reserve(&buf->rx, &pos, 1)) {
@@ -160,11 +168,6 @@ Options:\n\
 		pgm_name);
 }
 
-
-void sigalarm_handler(void)
-{
-	__atomic_store_n(&kill_flag, 1, __ATOMIC_RELEASE);
-}
 
 /*	main()
 */
@@ -239,31 +242,25 @@ int main(int argc, char **argv)
 			threads[i*2+1].func = rx_multi;
 		}
 	}
-	
-	/* set up timer, and signal handler */
-	struct itimerval it_val;
-
-	/* When SIGALRM is triggered, call 'sigalarm_handler' */
-	Z_die_if ((signal(SIGALRM, (void (*)(int)) sigalarm_handler) == SIG_ERR),
-		 "unable to catch SIGALRM");
-	
-	it_val.it_value.tv_sec = seconds;
-	it_val.it_value.tv_usec = (seconds%1000000);
-	it_val.it_interval = it_val.it_value;
 
 	/* run, dos, run */
 	nlc_timing_start(t);
 		for (size_t t=0; t < exec_threads; t++)
-			pthread_create(&threads[t].thread, NULL, threads[t].func, &buf);
+			Z_die_if(
+				pthread_create(&threads[t].thread, NULL,
+						threads[t].func, &buf)
+			, "");
 
-		/* set timer */
-		Z_die_if((setitimer(ITIMER_REAL, &it_val, NULL) == -1), 
-			"error calling setitimer");
+		sleep(seconds);
+		__atomic_store_n(&kill_flag, 1, __ATOMIC_RELEASE);
+		Z_log(Z_inf, "set kill flag");
 
 		size_t tally =0;
 		for (size_t t=0; t < exec_threads; t++) {
 			void *temp;
-			pthread_join(threads[t].thread, &temp);
+			Z_die_if(
+				pthread_join(threads[t].thread, &temp)
+				, "");
 			tally += (size_t)temp;
 		}
 	nlc_timing_stop(t);
