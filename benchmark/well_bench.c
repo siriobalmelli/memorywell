@@ -21,6 +21,16 @@ typedef struct {
 a_thread *threads = NULL;
 
 
+/*	consume
+Force the compiler to deference 'consume' right here, right now.
+Thou shalt not fool me, compiler
+*/
+static inline void consume(size_t consume)
+{
+	asm volatile ( "" : : [c] "r" (consume) : "memory" );
+}
+
+
 /*	lone_thread()
 Alternately read/write from one buffer
 */
@@ -28,7 +38,6 @@ void *lone_thread(void* arg)
 {
 	struct well *buf = arg;
 	size_t tally = 0;
-	volatile size_t consume;
 	size_t pos;
 
 	/* loop on TX */
@@ -40,8 +49,7 @@ void *lone_thread(void* arg)
 
 		Z_die_if(!well_reserve(&buf->rx, &pos, 1),
 			"lone thread should never block");
-		consume = WELL_DEREF(size_t, pos, 0, buf);
-			(size_t)consume; /* quash unused variable warning */
+		consume( WELL_DEREF(size_t, pos, 0, buf) );
 		tally++;
 		well_release_single(&buf->tx, 1);
 	}
@@ -102,7 +110,6 @@ void *rx_single(void* arg)
 {
 	struct well *buf = arg;
 	size_t tally = 0;
-	volatile size_t consume;
 	size_t pos;
 
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
@@ -110,8 +117,7 @@ void *rx_single(void* arg)
 			FAIL_DO();
 			continue;
 		}
-		consume = WELL_DEREF(size_t, pos, 0, buf);
-			(size_t)consume; /* quash unused variable warning */
+		consume( WELL_DEREF(size_t, pos, 0, buf) );
 		tally++;
 		well_release_single(&buf->tx, 1);
 	}
@@ -123,7 +129,6 @@ void *rx_multi(void* arg)
 {
 	struct well *buf = arg;
 	size_t tally = 0;
-	volatile size_t consume;
 	size_t pos;
 
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
@@ -131,8 +136,7 @@ void *rx_multi(void* arg)
 			FAIL_DO();
 			continue;
 		}
-		consume = WELL_DEREF(size_t, pos, 0, buf);
-			(size_t)consume; /* quash unused variable warning */
+		consume( WELL_DEREF(size_t, pos, 0, buf) );
 		tally++;
 		while (!well_release_multi(&buf->tx, 1, pos))
 			FAIL_DO();
