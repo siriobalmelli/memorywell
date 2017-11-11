@@ -7,8 +7,8 @@
 #include <getopt.h>
 #include <nonlibc.h> /* timing */
 
-#include<sys/time.h>
-#include<signal.h>
+#include <unistd.h> /* sleep() */
+
 
 static size_t waits = 0; /* how many times did threads wait? */
 static int kill_flag = 0;
@@ -41,6 +41,7 @@ void *lone_thread(void* arg)
 		Z_die_if(!well_reserve(&buf->rx, &pos, 1),
 			"lone thread should never block");
 		consume = WELL_DEREF(size_t, pos, 0, buf);
+			(size_t)consume; /* quash unused variable warning */
 		tally++;
 		well_release_single(&buf->tx, 1);
 	}
@@ -78,8 +79,6 @@ void *tx_multi(void* arg)
 	size_t tally = 0;
 	size_t pos;
 
-	nice(2);
-
 	/* loop on TX */
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
 		if (!well_reserve(&buf->tx, &pos, 1)) {
@@ -112,6 +111,7 @@ void *rx_single(void* arg)
 			continue;
 		}
 		consume = WELL_DEREF(size_t, pos, 0, buf);
+			(size_t)consume; /* quash unused variable warning */
 		tally++;
 		well_release_single(&buf->tx, 1);
 	}
@@ -126,14 +126,13 @@ void *rx_multi(void* arg)
 	volatile size_t consume;
 	size_t pos;
 
-	nice(2);
-
 	while (!__atomic_load_n(&kill_flag, __ATOMIC_CONSUME)) {
 		if (!well_reserve(&buf->rx, &pos, 1)) {
 			FAIL_DO();
 			continue;
 		}
 		consume = WELL_DEREF(size_t, pos, 0, buf);
+			(size_t)consume; /* quash unused variable warning */
 		tally++;
 		while (!well_release_multi(&buf->tx, 1, pos))
 			FAIL_DO();
@@ -253,7 +252,6 @@ int main(int argc, char **argv)
 
 		sleep(seconds);
 		__atomic_store_n(&kill_flag, 1, __ATOMIC_RELEASE);
-		Z_log(Z_inf, "set kill flag");
 
 		size_t tally =0;
 		for (size_t t=0; t < exec_threads; t++) {
