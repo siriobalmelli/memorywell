@@ -199,7 +199,7 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	_, ax = plt.subplots(figsize=(13, 8))
 	
 	ax.set_xlabel('thread pairs')
-	ax.set_xticks(lin_x_log, minor=False)
+	ax.set_xticks(lin_x_log, minor=True)
 	ax.set_xticklabels(lin_x)
 	all_values = []
 	all_values.extend(lin_y_mtx.values())
@@ -211,10 +211,12 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	y_max = math.log10(max(all_values)/seconds)
 	step = (y_max - y_min) / 5 
 	ticks = [ round(y_min + step * i,3) for i in range(6) ]
-	formatted_ticks = [ human_format(round(pow(10,i),0)) for i in ticks ]
+	powers_of_ten = [ human_format(pow(10,i)) for i in range(3, 9) ]
+	print(powers_of_ten)
+	#formatted_ticks = [ human_format(round(pow(10,i),0)) for i in ticks ]
 	ax.set_ylabel('operations per second')
-	ax.set_yticks(ticks, minor=False)
-	ax.set_yticklabels(formatted_ticks)
+	ax.set_yticks(ticks, minor=True)
+	ax.set_yticklabels(powers_of_ten)
 
 	# make sure the arrays are sorted by the thread count (keys)
 	lin_y_mtx_sorted = col.OrderedDict(sorted(lin_y_mtx.items(), key=lambda item: item))
@@ -233,7 +235,9 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	plt.title('MemoryWell {0}: transactions through single buffer;\r\nfail strategy {1}'.format(commit_id, chart_suffix[1:]))
 	ax.text(x=0.02, y=0, va='bottom', ha='left', s='{0}'.format(get_system_info()), transform=ax.transAxes)	
 	ax.text(x=0.65, y=0, va='bottom', ha='left', s='0 == baseline; single thread with no contention', transform=ax.transAxes)
-	plt.grid(True)
+	plt.yscale(value='log', basey=10, subsy=[2,3,4,5,6,7,8,9])
+	plt.grid(b=True, which='major')
+	plt.grid(b=True, which='minor', color='b', linestyle='--')
 	plt.savefig('{0} - {1} {2}.pdf'.format(commit_id, y_label_name, chart_suffix), dpi=600, papertype='a4', orientation='landscape', bbbox_inches='tight',
 			pad_inches=0)
 
@@ -248,7 +252,7 @@ def  human_format(num):
     while abs(num) >= 1000:
         magnitude += 1
         num /= 1000.0
-    return '%.0f %s' % (num, ['O', 'K', 'M', 'G', 'T', 'P'][magnitude])
+    return '%.0f %s' % (num, [ '', 'K', 'M', 'G', 'T', 'P'][magnitude])
 
 def print_usage():
 	print('./memwell_bench -r <number of benchmark iterations>')
@@ -284,7 +288,7 @@ def main():
 
 	for i in range(0, iterations):
 		print(i)
-		run_benchmark()
+#		run_benchmark()
 		runs[i] = parse_file(filename)
 	
 	avgs_ops = summate_runs(runs)
