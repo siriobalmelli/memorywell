@@ -101,6 +101,12 @@ def parse_file(filename):
 	
 	return d
 
+import platform
+import multiprocessing as mp
+
+def get_system_info():
+	return 'OS {0} - CPU Cores {1} - Architecture {2}'.format(platform.system(),mp.cpu_count(),platform.processor())
+
 dd = col.OrderedDict()
 import statistics as st
 threads = col.OrderedDict()
@@ -150,7 +156,7 @@ import matplotlib.pyplot as plt
 import math
 
 #Need two arrays: cpu_times, threads 
-def make_plots(cpu_time, chart_suffix, y_label_name):
+def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	#make a list of all 'chart_name' charts
 	charts = col.OrderedDict()
 	charts['XCH'] = []
@@ -188,10 +194,12 @@ def make_plots(cpu_time, chart_suffix, y_label_name):
 	
 	commit_id = current_commit()
 	lin_x = [ 0, 1, 2, 4, 8, 16 ]
-	_, ax = plt.subplots()
+	lin_x_log = [ int(math.log2(x)) for x in lin_x[1:] ]
+	lin_x_log.insert(0,-1)
+	_, ax = plt.subplots(figsize=(13, 8))
 	
-	ax.set_xlabel('threads')
-	ax.set_xticks(lin_x, minor=False)
+	ax.set_xlabel('thread pairs')
+	ax.set_xticks(lin_x_log, minor=False)
 	ax.set_xticklabels(lin_x)
 	all_values = []
 	all_values.extend(lin_y_mtx.values())
@@ -199,39 +207,48 @@ def make_plots(cpu_time, chart_suffix, y_label_name):
 	all_values.extend(lin_y_spl.values())
 	all_values.extend(lin_y_cas.values())
 	all_values.sort()
-	y_min = math.log10(min(all_values))
-	y_max = math.log10(max(all_values))
-	print(y_min)
-	print(y_max)
+	y_min = math.log10(min(all_values)/seconds)
+	y_max = math.log10(max(all_values)/seconds)
 	step = (y_max - y_min) / 5 
-	print(step)
-	ticks = [ round(y_min + step * i,3) for i in range(5) ]
-	print(ticks)
-	ax.set_ylabel('operations')
+	ticks = [ round(y_min + step * i,3) for i in range(6) ]
+	formatted_ticks = [ human_format(round(pow(10,i),0)) for i in ticks ]
+	ax.set_ylabel('operations per second')
 	ax.set_yticks(ticks, minor=False)
-	ax.set_yticklabels(ticks)
+	ax.set_yticklabels(formatted_ticks)
 
 	# make sure the arrays are sorted by the thread count (keys)
 	lin_y_mtx_sorted = col.OrderedDict(sorted(lin_y_mtx.items(), key=lambda item: item))
 	lin_y_xch_sorted = col.OrderedDict(sorted(lin_y_xch.items(), key=lambda item: item))
 	lin_y_spl_sorted = col.OrderedDict(sorted(lin_y_spl.items(), key=lambda item: item))
 	lin_y_cas_sorted = col.OrderedDict(sorted(lin_y_cas.items(), key=lambda item: item))
-	x1 = [ i for i in lin_y_mtx_sorted.keys() ]
-	y1 = [ math.log10(i) for i in lin_y_mtx_sorted.values() ]
-	x2 = [ i for i in lin_y_xch_sorted.keys() ]
-	y2 = [ math.log10(i) for i in lin_y_xch_sorted.values() ] 
-	x3 = [ i for i in lin_y_spl_sorted.keys() ]
-	y3 = [ math.log10(i) for i in lin_y_spl_sorted.values() ]
-	x4 = [ i for i in lin_y_cas_sorted.keys() ]
-	y4 = [ math.log10(i) for i in lin_y_cas_sorted.values() ]
+	x = lin_x_log #[ i for i in lin_y_mtx_sorted.keys() ]
+	y1 = [ math.log10((i/seconds)) for i in lin_y_mtx_sorted.values() ]
+	y2 = [ math.log10((i/seconds)) for i in lin_y_xch_sorted.values() ] 
+	y3 = [ math.log10((i/seconds)) for i in lin_y_spl_sorted.values() ]
+	y4 = [ math.log10((i/seconds)) for i in lin_y_cas_sorted.values() ]
 
-	plt.plot(x1,y1, 'b-', x2, y2, 'g-', x3, y3, 'r-', x4,y4, 'y-')
-	plt.legend(['blue = MTX', 'green = XCH', 'red = SPL', 'yellow = CAS'], loc='upper right')
-	plt.axis(xmin = min(lin_x), xmax = max(lin_x), ymin = y_min, ymax = y_max)
-	plt.savefig('{0} - {1} {2}.pdf'.format(commit_id, y_label_name, chart_suffix), dpi=600, papertype='a4', orientation='landscape')
+	plt.plot(x,y1, 'b-', x, y2, 'g-', x, y3, 'r-', x,y4, 'y-')
+	plt.legend(['MTX', 'XCH', 'SPL', 'CAS'], loc='upper right')
+	plt.axis(xmin = min(lin_x_log), xmax = max(lin_x_log), ymin = y_min, ymax = y_max)
+	plt.title('MemoryWell {0}: transactions through single buffer;\r\nfail strategy {1}'.format(commit_id, chart_suffix[1:]))
+	ax.text(x=0.02, y=0, va='bottom', ha='left', s='{0}'.format(get_system_info()), transform=ax.transAxes)	
+	ax.text(x=0.65, y=0, va='bottom', ha='left', s='0 == baseline; single thread with no contention', transform=ax.transAxes)
+	plt.grid(True)
+	plt.savefig('{0} - {1} {2}.pdf'.format(commit_id, y_label_name, chart_suffix), dpi=600, papertype='a4', orientation='landscape', bbbox_inches='tight',
+			pad_inches=0)
 
-
+ 
 import sys, getopt
+
+def  human_format(num):
+    '''formats 'num' into the proper K|M|G|TiB. 
+	returns a string.
+    '''
+    magnitude = 0
+    while abs(num) >= 1000:
+        magnitude += 1
+        num /= 1000.0
+    return '%.0f %s' % (num, ['O', 'K', 'M', 'G', 'T', 'P'][magnitude])
 
 def print_usage():
 	print('./memwell_bench -r <number of benchmark iterations>')
@@ -252,7 +269,7 @@ def parse_opts(opts):
 def main():
 	filename = 'meson-logs/benchmarklog.txt'
 	runs = col.OrderedDict()
-
+	
 # parse options
 	try:
 		opts, args = getopt.getopt(sys.argv[1:], "r:h", ["runs=","help"])
