@@ -193,12 +193,11 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 				lin_y_cas[l[0]] = l[1]
 	
 	commit_id = current_commit()
-	lin_x = [ 0, 1, 2, 4, 8, 16 ]
+	lin_x = [ 0, 1, 2, 4, 8, 16, 32 ]
 	lin_x_log = [ int(math.log2(x)) for x in lin_x[1:] ]
 	lin_x_log.insert(0,-1)
 	_, ax = plt.subplots(figsize=(13, 8))
-	
-	ax.set_xlabel('thread pairs')
+	ax.set_xlabel('threads')
 	ax.set_xticks(lin_x_log, minor=True)
 	ax.set_xticklabels(lin_x)
 	all_values = []
@@ -207,37 +206,30 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	all_values.extend(lin_y_spl.values())
 	all_values.extend(lin_y_cas.values())
 	all_values.sort()
-	y_min = math.log10(min(all_values)/seconds)
-	y_max = math.log10(max(all_values)/seconds)
-	step = (y_max - y_min) / 5 
-	ticks = [ round(y_min + step * i,3) for i in range(6) ]
-	powers_of_ten = [ human_format(pow(10,i)) for i in range(3, 9) ]
-	print(powers_of_ten)
-	#formatted_ticks = [ human_format(round(pow(10,i),0)) for i in ticks ]
+	powers_of_ten = [ pow(10,i) for i in range(1, 9) ]
+	y_min = min(powers_of_ten)
+	y_max = max(powers_of_ten)
 	ax.set_ylabel('operations per second')
-	ax.set_yticks(ticks, minor=True)
-	ax.set_yticklabels(powers_of_ten)
 
 	# make sure the arrays are sorted by the thread count (keys)
 	lin_y_mtx_sorted = col.OrderedDict(sorted(lin_y_mtx.items(), key=lambda item: item))
 	lin_y_xch_sorted = col.OrderedDict(sorted(lin_y_xch.items(), key=lambda item: item))
 	lin_y_spl_sorted = col.OrderedDict(sorted(lin_y_spl.items(), key=lambda item: item))
 	lin_y_cas_sorted = col.OrderedDict(sorted(lin_y_cas.items(), key=lambda item: item))
-	x = lin_x_log #[ i for i in lin_y_mtx_sorted.keys() ]
-	y1 = [ math.log10((i/seconds)) for i in lin_y_mtx_sorted.values() ]
-	y2 = [ math.log10((i/seconds)) for i in lin_y_xch_sorted.values() ] 
-	y3 = [ math.log10((i/seconds)) for i in lin_y_spl_sorted.values() ]
-	y4 = [ math.log10((i/seconds)) for i in lin_y_cas_sorted.values() ]
+	x = lin_x_log
+	y1 = [ (i/seconds) for i in lin_y_mtx_sorted.values() ]
+	y2 = [ (i/seconds) for i in lin_y_xch_sorted.values() ]
+	y3 = [ (i/seconds) for i in lin_y_spl_sorted.values() ]
+	y4 = [ (i/seconds) for i in lin_y_cas_sorted.values() ]
 
 	plt.plot(x,y1, 'b-', x, y2, 'g-', x, y3, 'r-', x,y4, 'y-')
-	plt.legend(['MTX', 'XCH', 'SPL', 'CAS'], loc='upper right')
+	plt.yscale(value='log', basey=10, subsy=[1,2,3,4,5,6,7,8,9])
 	plt.axis(xmin = min(lin_x_log), xmax = max(lin_x_log), ymin = y_min, ymax = y_max)
+	plt.legend(['MTX', 'XCH', 'SPL', 'CAS'], loc='upper right')
 	plt.title('MemoryWell {0}: transactions through single buffer;\r\nfail strategy {1}'.format(commit_id, chart_suffix[1:]))
 	ax.text(x=0.02, y=0, va='bottom', ha='left', s='{0}'.format(get_system_info()), transform=ax.transAxes)	
-	ax.text(x=0.65, y=0, va='bottom', ha='left', s='0 == baseline; single thread with no contention', transform=ax.transAxes)
-	plt.yscale(value='log', basey=10, subsy=[2,3,4,5,6,7,8,9])
 	plt.grid(b=True, which='major')
-	plt.grid(b=True, which='minor', color='b', linestyle='--')
+	plt.grid(b=True, which='minor', linestyle='--')
 	plt.savefig('{0} - {1} {2}.pdf'.format(commit_id, y_label_name, chart_suffix), dpi=600, papertype='a4', orientation='landscape', bbbox_inches='tight',
 			pad_inches=0)
 
@@ -288,7 +280,7 @@ def main():
 
 	for i in range(0, iterations):
 		print(i)
-#		run_benchmark()
+		run_benchmark()
 		runs[i] = parse_file(filename)
 	
 	avgs_ops = summate_runs(runs)
@@ -298,9 +290,5 @@ def main():
 	make_plots(avgs_ops, '_SPIN', 'operations')
 	make_plots(avgs_ops, '_SLEEP', 'operations')
 
-#	make_plots(avgs_cpu, '_BOUNDED', 'cpu time')
-#	make_plots(avgs_cpu, '_YIELD', 'cpu time')
-#	make_plots(avgs_cpu, '_SPIN', 'cpu time')
-#	make_plots(avgs_cpu, '_SLEEP', 'cpu time')
 if __name__ == "__main__":
 	main()
