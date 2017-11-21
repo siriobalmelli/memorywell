@@ -155,7 +155,6 @@ import matplotlib.pyplot as plt
 
 import math
 
-#Need two arrays: cpu_times, threads 
 def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	#make a list of all 'chart_name' charts
 	charts = col.OrderedDict()
@@ -193,13 +192,14 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 				lin_y_cas[l[0]] = l[1]
 	
 	commit_id = current_commit()
-	lin_x = [ 0, 1, 2, 4, 8, 16, 32 ]
+	lin_x_ticks = [ 0, 2, 4, 8, 16, 32 ]
+	lin_x = [ 0, 1, 2, 4, 8, 16 ]
 	lin_x_log = [ int(math.log2(x)) for x in lin_x[1:] ]
 	lin_x_log.insert(0,-1)
 	_, ax = plt.subplots(figsize=(13, 8))
 	ax.set_xlabel('threads')
 	ax.set_xticks(lin_x_log, minor=True)
-	ax.set_xticklabels(lin_x)
+	ax.set_xticklabels(lin_x_ticks)
 	all_values = []
 	all_values.extend(lin_y_mtx.values())
 	all_values.extend(lin_y_xch.values())
@@ -216,6 +216,7 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	lin_y_xch_sorted = col.OrderedDict(sorted(lin_y_xch.items(), key=lambda item: item))
 	lin_y_spl_sorted = col.OrderedDict(sorted(lin_y_spl.items(), key=lambda item: item))
 	lin_y_cas_sorted = col.OrderedDict(sorted(lin_y_cas.items(), key=lambda item: item))
+
 	x = lin_x_log
 	y1 = [ (i/seconds) for i in lin_y_mtx_sorted.values() ]
 	y2 = [ (i/seconds) for i in lin_y_xch_sorted.values() ]
@@ -226,12 +227,14 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	plt.yscale(value='log', basey=10, subsy=[1,2,3,4,5,6,7,8,9])
 	plt.axis(xmin = min(lin_x_log), xmax = max(lin_x_log), ymin = y_min, ymax = y_max)
 	plt.legend(['MTX', 'XCH', 'SPL', 'CAS'], loc='upper right')
-	plt.title('MemoryWell {0}: transactions through single buffer;\r\nfail strategy {1}'.format(commit_id, chart_suffix[1:]))
+	plt.title('MemoryWell {0}: transactions through single buffer;\
+			\r\nfail strategy {1}'.format(commit_id, chart_suffix[1:]))
+
 	ax.text(x=0.02, y=0, va='bottom', ha='left', s='{0}'.format(get_system_info()), transform=ax.transAxes)	
 	plt.grid(b=True, which='major')
 	plt.grid(b=True, which='minor', linestyle='--')
-	plt.savefig('{0} - {1} {2}.pdf'.format(commit_id, y_label_name, chart_suffix), dpi=600, papertype='a4', orientation='landscape', bbbox_inches='tight',
-			pad_inches=0)
+	plt.savefig('{0} - {1} {2}.pdf'.format(commit_id, y_label_name, chart_suffix),
+			dpi=600, papertype='a4', orientation='landscape', bbbox_inches='tight',pad_inches=0)
 
  
 import sys, getopt
