@@ -35,8 +35,15 @@ endif
 
 
 # deps
-nonlibc = dependency('nonlibc', fallback : ['nonlibc', 'nonlibc_dep'],
-		    version : '>=0.1.7') 
+if get_option('static_build') == true
+	message('static build')
+	nonlibc = dependency('nonlibc', static: true, version : '>=0.1.7')
+else
+	message('dynamic build')
+	nonlibc = dependency('nonlibc', static: false, version : '>=0.1.7') 
+endif
+
+
 # All deps in a single arg. Use THIS ONE in compile calls
 deps = [ nonlibc ]
 
