@@ -35,13 +35,20 @@ endif
 
 
 # deps
-if get_option('static_build') == true
-	message('static build')
-	nonlibc = dependency('nonlibc', static: true, version : '>=0.1.7')
+# deps are either statically or dynamically incorporated;
+#+	see meson_options.txt for the default value, which can be overridden
+#+	with a -Ddep_type=["shared"||"static"] flag when running meson.
+_dep = get_option('dep_type')
+if _dep == 'shared'
+	dep_shared = true
+elif _dep == 'static'
+	dep_shared = false
 else
-	message('dynamic build')
-	nonlibc = dependency('nonlibc', static: false, version : '>=0.1.7') 
+	error('-Ddep_type expects "shared" or "static"; got ' + _dep)
 endif
+# insert deps here
+nonlibc = dependency('nonlibc', static: not dep_shared, version : '>=0.1.7',
+		fallback : ['nonlibc', 'nonlibc_dep'], required : true)
 
 
 # All deps in a single arg. Use THIS ONE in compile calls

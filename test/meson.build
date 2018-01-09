@@ -11,32 +11,20 @@ tests = [
 ]
 
 foreach t : tests
-  name = t.split('.')[0]
-  name_spaced = ' '.join(name.split('_'))
+	name = t.split('.')[0]
+	name_spaced = ' '.join(name.split('_'))
 
-  # if standalone, test both linkages
-  if not meson.is_subproject()
-    a_test = executable(name + '_shared', t,
+	a_test = executable(name + '_shared', t,
 		    include_directories : inc,
 		    link_with : well_shared,
 		    dependencies : [ deps, thread_dep ])
-    test(name_spaced + ' (shared)', a_test)
+	test(name_spaced + ' (shared)', a_test)
 
-    # always test static linkage
-    test_static = executable(name + '_static', t,
+	test_static = executable(name + '_static', t,
 		    include_directories : inc,
 		    link_with : well_static,
 		    dependencies : [ deps, thread_dep ])
-    test(name_spaced + ' (static)', test_static)
-
-  # otherwise, test whatever we are exporting
-  else
-    a_test = executable(name, t,
-		    include_directories : inc,
-		    link_with : well,
-		    dependencies : [ deps, thread_dep ])
-    test(name_spaced, a_test)
-  endif
+	test(name_spaced + ' (static)', test_static)
 endforeach
 
 
