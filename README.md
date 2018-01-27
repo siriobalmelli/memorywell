@@ -86,6 +86,29 @@ Any of the programs in the [test](test/) directory serves a documentation
 
 ## Building and Installing
 
+**TODO**: preamble to nix vs. non-nix; clean up both
+
+### Nix section
+
+`nix-build`
+
+Not all the dependencies (e.g. `nonlibc` at the time of this writing)
+	may be in `nix-pkgs` - add a `-I` flag to `nix-build` pointing to (one or more)
+	dirs containing the source repos for these packages:
+
+```bash
+memorywell$ nix-build
+error: file ‘nonlibc’ was not found in the Nix search path
+memorywell$ ls ~
+nonlibc
+memorywell$ nix-build -I ~
+```
+
+**NOTE** however that if `nonlibc` were in `nix-pkgs` then that version
+	would override the one on your local disk.
+
+### Non-NIX section
+
 You'll need Python ≥ 3.5.
 
 Build and test on your machine by running:

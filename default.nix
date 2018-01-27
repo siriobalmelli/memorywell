@@ -1,13 +1,17 @@
-{ 	system ? builtins.currentSystem,
+{ 	# deps
+	system ? builtins.currentSystem,
+	nixpkgs ? import <nixpkgs> { inherit system; },
+	nonlibc ? nixpkgs.nonlibc or (import <nonlibc> { inherit system; }),
+	# options
 	buildtype ? "release",
 	compiler ? "gcc",
 	lib_type ? "shared",
 	dep_type ? "shared",
-	mesonFlags ? "",
-	nonlibc
+	mesonFlags ? ""
 }:
 
-with import <nixpkgs> { inherit system; };
+# note that "nonlibc" above should not be clobbered by this
+with nixpkgs;
 
 stdenv.mkDerivation rec {
 	name = "memorywell";
@@ -18,10 +22,9 @@ stdenv.mkDerivation rec {
 		clang
 		clang-tools
 		cscope
-		ninja
-		nonlibc
 		meson
 		ninja
+		nonlibc
 		pandoc
 		pkgconfig
 		python3
