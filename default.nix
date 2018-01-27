@@ -3,7 +3,8 @@
 	compiler ? "gcc",
 	lib_type ? "shared",
 	dep_type ? "shared",
-	mesonFlags ? ""
+	mesonFlags ? "",
+	nonlibc
 }:
 
 with import <nixpkgs> { inherit system; };
@@ -17,6 +18,8 @@ stdenv.mkDerivation rec {
 		clang
 		clang-tools
 		cscope
+		ninja
+		nonlibc
 		meson
 		ninja
 		pandoc
@@ -25,13 +28,6 @@ stdenv.mkDerivation rec {
 		valgrind
 		which
 	];
-
-	# import nonlibc TODO: fixthis
-	nonlibc1 = callPackage ../nonlibc { inherit buildtype; inherit compiler; 
-					lib_type = dep_type; inherit dep_type; };
-	postPatch = ''
-		PKG_CONFIG_PATH="${nonlibc1.outPath}"/lib/pkgconfig/
-	'';
 
 	# just work with the current directory (aka: Git repo), no fancy tarness
 	src = ./.;
@@ -47,8 +43,8 @@ stdenv.mkDerivation rec {
 		+ " --buildtype=${buildtype}"
 		+ " -Dlib_type=${lib_type}"
 		+ " -Ddep_type=${dep_type}";
+
 	configurePhase = ''
-		echo "pkgconfig: $PKG_CONFIG_PATH"
 		echo "flags: $mFlags"
 		echo "prefix: $out"
 		CC=${compiler} meson --prefix=$out build $mFlags
