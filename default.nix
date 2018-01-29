@@ -4,7 +4,7 @@
 	nonlibc ? nixpkgs.nonlibc or (import <nonlibc> { inherit system; }),
 	# options
 	buildtype ? "release",
-	compiler ? "gcc",
+	compiler ? "clang",
 	lib_type ? "shared",
 	dep_type ? "shared",
 	mesonFlags ? ""
