@@ -1,7 +1,13 @@
 { 	# deps
 	system ? builtins.currentSystem,
 	nixpkgs ? import <nixpkgs> { inherit system; },
-	nonlibc ? nixpkgs.nonlibc or (import <nonlibc> { inherit system; }),
+	nonlibc ? nixpkgs.nonlibc or import <nonlibc> { inherit system;
+												inherit buildtype;
+												inherit compiler;
+												inherit lib_type;
+												inherit dep_type;
+												inherit mesonFlags;
+	},
 	# options
 	buildtype ? "release",
 	compiler ? "clang",
@@ -15,21 +21,27 @@ with nixpkgs;
 
 stdenv.mkDerivation rec {
 	name = "memorywell";
-	env = buildEnv { name = name; paths = nativeBuildInputs; };
+	#env = buildEnv { name = name; paths = nativeBuildInputs; };
 	outputs = [ "out" ];
+
+	# build-only deps
 	nativeBuildInputs = [
 		(lowPrio gcc)
+		(lowPrio clang-tools)
 		clang
-		clang-tools
 		cscope
 		meson
 		ninja
-		nonlibc
 		pandoc
 		pkgconfig
 		python3
 		valgrind
 		which
+	];
+
+	# runtime deps
+	buildInputs = [
+		nonlibc
 	];
 
 	# just work with the current directory (aka: Git repo), no fancy tarness
@@ -40,6 +52,12 @@ stdenv.mkDerivation rec {
 	meson = pkgs.meson.overrideAttrs ( oldAttrs: rec {
 		setupHook = "";
 	});
+
+	# don't harden away position-dependent speedups for static builds
+	hardeningDisable = if lib_type == "static" then
+		[ "pic" "pie" ]
+	else
+		[];
 
 	# build
 	mFlags = mesonFlags
@@ -54,8 +72,8 @@ stdenv.mkDerivation rec {
 		cd build
 		''; 
 
-	buildPhase = '' 
-		ninja test
-		ninja install
-		'';
+	buildPhase = "ninja";
+	doCheck = true;
+	checkPhase = "ninja test";
+	installPhase = "ninja install";
 }
