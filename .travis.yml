@@ -16,5 +16,5 @@ before_install:
   - pushd ~; git clone --branch=sirio https://github.com/siriobalmelli/nonlibc.git; popd
 
 script:
-  - nix-build -I ~
+  - nix-build -I ~ --arg dep_type \"static\"
 ...
