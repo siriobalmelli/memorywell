@@ -1,4 +1,16 @@
+/*	well_test.c
+
+Test single- and multi-threaded use of memorywell.
+
+Used to test that data in and out of buffer is correct.
+
+Not good for benchmarking speed: uses a fixed number of runs
+	(which may run terribly slowly depending on settings)
+	to verify data correctness.
+*/
+
 #include <well.h>
+#include <well_fail.h>
 
 #include <zed_dbg.h>
 #include <stdlib.h>
@@ -6,13 +18,8 @@
 #include <getopt.h>
 #include <nonlibc.h> /* timing */
 
-/* TODO:
-	- yield to a specific thread (eventing) instead of general yield()?
-	- validate reserve and release with '0' size.
-*/
 
-
-static size_t numiter = 50000000;
+static size_t numiter = 10000000;
 static size_t blk_cnt = 256; /* how many blocks in the cbuf */
 const static size_t blk_size = sizeof(size_t); /* in Bytes */
 
@@ -23,45 +30,7 @@ static pthread_t *rx = NULL;
 
 static size_t reservation = 1; /* how many blocks to reserve at once */
 
-
-/*
-	allow compiling with different wait strategies
-*/
-#define SPIN 1
-#define COUNT 2		/* No longer implemented: just another spin */
-#define YIELD 3
-#define SLEEP 4
-#define SIGNAL 5	/* TODO: implement signaling between threads on each side
-				of the buffer.
-			*/
-#define BOUNDED 6
-
-#ifndef FAIL_METHOD
-#define FAIL_METHOD BOUNDED /* OS X scheduler seems to dislike yield() */
-#endif
-
 static size_t waits = 0; /* how many times did threads wait? */
-__thread size_t wait_count = 0;
-
-/* Warning: unsafe for high thread counts! */
-#if (FAIL_METHOD == SPIN || FAIL_METHOD == COUNT)
-	#define FAIL_DO() { wait_count++; }
-
-#elif (FAIL_METHOD == YIELD)
-	#define FAIL_DO() { wait_count++; sched_yield(); }
-
-/* Warning: this is horrifyingly slow on OS X */
-#elif (FAIL_METHOD == SLEEP)
-	#include <time.h>
-	#define FAIL_DO() { wait_count++; usleep(1); }
-
-#elif (FAIL_METHOD == BOUNDED)
-	/* spin only 8 iterations, then yield() */
-	#define FAIL_DO() if (!(++wait_count & 0x7)) { sched_yield(); }
-
-#else
-#error "fail method not implemented"
-#endif
 
 
 /*	tx_thread()
@@ -173,7 +142,7 @@ void *rx_multi(void* arg)
 void usage(const char *pgm_name)
 {
 	fprintf(stderr, "Usage: %s [OPTIONS]\n\
-Test Single-Producer|Single-Consumer correctness/performance.\n\
+Test MemoryWell correctness/performance.\n\
 \n\
 Notes:\n\
 - block size is fixed at sizeof(size_t)\n\

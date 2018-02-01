@@ -5,3 +5,5 @@ cscope*
 toolchain/ninja*
 _site
 .DS_Store
+result*
+subprojects*

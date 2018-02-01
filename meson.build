@@ -35,8 +35,22 @@ endif
 
 
 # deps
-nonlibc = dependency('nonlibc', fallback : ['nonlibc', 'nonlibc_dep'],
-		    version : '>=0.1.7') 
+# deps are either statically or dynamically incorporated;
+#+	see meson_options.txt for the default value, which can be overridden
+#+	with a -Ddep_type=["shared"||"static"] flag when running meson.
+
+dep_static = false
+_dep = get_option('dep_type')
+if _dep == 'static'
+	dep_static = true
+endif
+
+# Insert deps here
+# Note that subproject expected to export as '[name]_dep_[shared||static]'
+nonlibc = dependency('nonlibc', static: dep_static, version : '>=0.1.8',
+		fallback : ['nonlibc', 'nonlibc_dep_' + _dep ], required : true)
+
+
 # All deps in a single arg. Use THIS ONE in compile calls
 deps = [ nonlibc ]
 
