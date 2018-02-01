@@ -3,18 +3,17 @@ language: nix
 
 matrix:
   include:
-    - os: linux
-      dist: trusty
-
     - os: osx
-
     - os: linux
 
 before_install:
   # Clone nonlibc repo as memorywell depends on it.
   # TODO: replace this with a nix-channel instead of a download
-  - pushd ~; git clone --branch=sirio https://github.com/siriobalmelli/nonlibc.git; popd
+  - pushd ~; git clone https://github.com/siriobalmelli/nonlibc.git; popd
 
 script:
+  # TODO: not sure why Travis barfs with
+  #+  'dyld: Library not loaded: @rpath/libnonlibc.dylib'
+  # Cannot reproduce this on an OS X system even using nix-shell --pure
   - nix-build -I ~ --arg dep_type \"static\"
 ...
