@@ -5,8 +5,10 @@
 
 Failure strategies for well libraries.
 AKA: what to do when reserve/release doesn't succeed?
-*/
 
+TODO:
+	- yield to a specific thread (eventing) instead of general yield()?
+*/
 
 #include <stddef.h> /* size_t */
 __thread size_t wait_count = 0;

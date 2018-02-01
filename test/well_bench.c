@@ -1,12 +1,10 @@
-/*	well_test.c
+/*	well_bench.c
 
-Test single- and multi-threaded use of memorywell.
+Used to test speed of memorywell buffers with different 
+	threading and size configurations.
 
-Used to test that data in and out of buffer is correct.
-
-Not good for benchmarking speed: uses a fixed number of runs
-	(which may run terribly slowly depending on settings)
-	to verify data correctness.
+Runs for a fixed time and then reports number of blocks pushed/pulled
+	from the buffer.
 */
 
 #include <well.h>
@@ -19,9 +17,9 @@ Not good for benchmarking speed: uses a fixed number of runs
 #include <nonlibc.h> /* timing */
 
 
-static size_t numiter = 10000000;
 static size_t blk_cnt = 256; /* how many blocks in the cbuf */
 const static size_t blk_size = sizeof(size_t); /* in Bytes */
+static unsigned int secs = 1; /* how long to run test */
 
 static size_t tx_thread_cnt = 1;
 static pthread_t *tx = NULL;
@@ -32,54 +30,54 @@ static size_t reservation = 1; /* how many blocks to reserve at once */
 
 static size_t waits = 0; /* how many times did threads wait? */
 
+static uint_fast8_t kill_flag = 0;
+
 
 /*	tx_thread()
 */
 void *tx_single(void* arg)
 {
 	struct well *buf = arg;
-	size_t tally = 0;
-	size_t num = numiter;
+	size_t i = 0;
+	volatile size_t unused;
 
 	/* loop on TX */
-	for (size_t i=0, res=0; i < num; i += res) {
-		size_t ask = i + reservation < num ? reservation : num - i;
-
-		size_t pos;
-		while (!(res = well_reserve(&buf->tx, &pos, ask)))
+	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
+		size_t pos, res;
+		while (!(res = well_reserve(&buf->tx, &pos, reservation)))
 			FAIL_DO();
 
 		for (size_t j=0; j < res; j++)
-			tally += WELL_DEREF(size_t, pos, j, buf) = i + j;
+			unused = WELL_DEREF(size_t, pos, j, buf) = i + j;
 		well_release_single(&buf->rx, res);
+		i += res;
 	}
 
 	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
-	return (void *)tally;
+	return (void *)i;
 }
 void *tx_multi(void* arg)
 {
 	struct well *buf = arg;
-	size_t tally = 0;
-	size_t num = numiter / tx_thread_cnt;
+	size_t i = 0;
+	volatile size_t unused;
 
 	/* loop on TX */
-	for (size_t i=0, res=0; i < num; i += res) {
-		size_t ask = i + reservation < num ? reservation : num - i;
-
-		size_t pos;
-		while (!(res = well_reserve(&buf->tx, &pos, ask)))
+	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
+		size_t pos, res;
+		while (!(res = well_reserve(&buf->tx, &pos, reservation)))
 			FAIL_DO();
 
 		for (size_t j=0; j < res; j++)
-			tally += WELL_DEREF(size_t, pos, j, buf) = i + j;
+			unused = WELL_DEREF(size_t, pos, j, buf) = i + j;
 
 		while (!well_release_multi(&buf->rx, res, pos))
 			FAIL_DO();
+		i += res;
 	}
 
 	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
-	return (void *)tally;
+	return (void *)i;
 }
 
 
@@ -88,52 +86,45 @@ void *tx_multi(void* arg)
 void *rx_single(void* arg)
 {
 	struct well *buf = arg;
-	size_t tally = 0;
-	size_t num = numiter;
+	size_t i = 0;
+	volatile size_t unused;
 
-	/* loop on RX */
-	for (size_t i=0, res=0; i < num; i += res) {
-		size_t ask = i + reservation < num ? reservation : num - i;
-
-		size_t pos;
-		while (!(res = well_reserve(&buf->rx, &pos, ask)))
+	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
+		size_t pos, res;
+		while (!(res = well_reserve(&buf->rx, &pos, reservation)))
 			FAIL_DO();
 
-		for (size_t j=0; j < res; j++) {
-			size_t temp = WELL_DEREF(size_t, pos, j, buf);
-			tally += temp;
-		}
+		for (size_t j=0; j < res; j++)
+			unused = WELL_DEREF(size_t, pos, j, buf);
 		well_release_single(&buf->tx, res);
+		i += res;
 	}
 
 	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
-	return (void *)tally;
+	return (void *)i;
 }
 void *rx_multi(void* arg)
 {
 	struct well *buf = arg;
-	size_t tally = 0;
-	size_t num = numiter / rx_thread_cnt;
+	size_t i = 0;
+	volatile size_t unused;
 
 	/* loop on RX */
-	for (size_t i=0, res=0; i < num; i += res) {
-		size_t ask = i + reservation < num ? reservation : num - i;
-
-		size_t pos;
-		while (!(res = well_reserve(&buf->rx, &pos, ask)))
+	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
+		size_t pos, res;
+		while (!(res = well_reserve(&buf->rx, &pos, reservation)))
 			FAIL_DO();
 
-		for (size_t j=0; j < res; j++) {
-			size_t temp = WELL_DEREF(size_t, pos, j, buf);
-			tally += temp;
-		}
+		for (size_t j=0; j < res; j++)
+			unused = WELL_DEREF(size_t, pos, j, buf);
 
 		while (!well_release_multi(&buf->tx, res, pos))
 			FAIL_DO();
+		i += res;
 	}
 
 	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
-	return (void *)tally;
+	return (void *)i;
 }
 
 
@@ -148,7 +139,7 @@ Notes:\n\
 - block size is fixed at sizeof(size_t)\n\
 \n\
 Options:\n\
--n, --numiter <iter>	:	Push <iter> blocks through the buffer.\n\
+-s, --secs <seconds>	:	How long to run test.\n\
 -c, --count <blk_count>	:	How many blocks in the circular buffer.\n\
 -r, --reservation <res>	:	(Attempt to) reserve <res> blocks at once.\n\
 -t, --tx-threads	:	Number of TX threads.\n\
@@ -173,7 +164,7 @@ int main(int argc, char **argv)
 	*/
 	int opt = 0;
 	static struct option long_options[] = {
-		{ "numiter",	required_argument,	0,	'n'},
+		{ "secs",	required_argument,	0,	's'},
 		{ "count",	required_argument,	0,	'c'},
 		{ "reservation",required_argument,	0,	'r'},
 		{ "tx-threads",	required_argument,	0,	't'},
@@ -181,12 +172,12 @@ int main(int argc, char **argv)
 		{ "help",	no_argument,		0,	'h'}
 	};
 
-	while ((opt = getopt_long(argc, argv, "n:c:r:t:x:h", long_options, NULL)) != -1) {
+	while ((opt = getopt_long(argc, argv, "s:c:r:t:x:h", long_options, NULL)) != -1) {
 		switch(opt)
 		{
-			case 'n':
-				opt = sscanf(optarg, "%zu", &numiter);
-				Z_die_if(opt != 1, "invalid numiter '%s'", optarg);
+			case 's':
+				opt = sscanf(optarg, "%u", &secs);
+				Z_die_if(opt != 1, "invalid secs '%s'", optarg);
 				break;
 
 			case 'c':
@@ -222,29 +213,10 @@ int main(int argc, char **argv)
 				Z_die("option '%c' invalid", opt);
 		}
 	}
-	/* sanity check thread counts */
-	Z_die_if(numiter != nm_next_mult64(numiter, tx_thread_cnt),
-		"numiter %zu doesn't evenly divide into %zu tx threads",
-		numiter, tx_thread_cnt);
-	Z_die_if(numiter != nm_next_mult64(numiter, rx_thread_cnt),
-		"numiter %zu doesn't evenly divide into %zu rx threads",
-		numiter, rx_thread_cnt);
 	/* sanity check reservation sizes */
-	size_t num = numiter / tx_thread_cnt;
-	Z_die_if(num != nm_next_mult64(num, reservation),
-		"TX: num %zu doesn't evenly divide into %zu reservation blocks",
-		num, reservation);
-	num = numiter / rx_thread_cnt;
-	Z_die_if(num != nm_next_mult64(num, reservation),
-		"RX: num %zu doesn't evenly divide into %zu reservation blocks",
-		num, reservation);
-	/* ... for finite values tho */
-	Z_die_if(numiter > 1000000000, "one billion is plenty thanks");
-
-	/* do MANY less iterations if running under Valgrind! */
-	const static size_t valgrind_max = 100000;
-	if (getenv("VALGRIND") && numiter >valgrind_max)
-		numiter = valgrind_max;
+	Z_die_if(reservation > blk_cnt,
+		"would attempt to reserve %zu from buffer with %zu blocks",
+		reservation, blk_cnt);
 
 
 	/* create buffer */
@@ -277,6 +249,11 @@ int main(int argc, char **argv)
 		for (size_t i=0; i < rx_thread_cnt; i++)
 			pthread_create(&rx[i], NULL, rx_t, &buf);
 
+		/* set kill flag after time elapsed */
+		while ((secs = sleep(secs)))
+			;
+		__atomic_store_n(&kill_flag, 1, __ATOMIC_RELAXED);
+
 		/* wait for threads to finish */
 		size_t tx_i_sum = 0, rx_i_sum = 0;
 		for (size_t i=0; i < tx_thread_cnt; i++) {
@@ -291,30 +268,13 @@ int main(int argc, char **argv)
 		}
 	nlc_timing_stop(t);
 
-	/* verify sums */
-	Z_die_if(tx_i_sum != rx_i_sum, "%zu != %zu", tx_i_sum, rx_i_sum);
-	/* This is the expected sum of all 'i' loop iterators for all threads
-		The logic to arrive at this was:
-			@1 : i = 0		0/1 = 0
-			@2 : i = 0+1		2/1 = 0.5
-			@3 : i = 0+1+2		3/3 = 1
-			@4 : i = 0+1+2+3	6/4 = 1.5
-			@5 : i = 0+1+2+3+4	10/5 = 2
-			...
-			@8 : i = 0+1+2+3+4+5+6+7	28/8	= 3.5
-			@8 : (8-1)*0.5				= 3.5
-			@8 : 0+1+2+3+4+5+6+7 = (8-1)*0.5*8 = 28
-	*/
-	numiter /= tx_thread_cnt;
-	size_t verif_i_sum = (numiter -1) * 0.5 * numiter * tx_thread_cnt;
-	Z_die_if(verif_i_sum != tx_i_sum, "%zu != %zu", verif_i_sum, tx_i_sum);
-
 	/* print stats */
-	printf("numiter %zu; blk_size %zu; blk_count %zu; reservation %zu\n",
-		numiter, blk_size, blk_cnt, reservation);
+	printf("secs %u; blk_size %zu; blk_count %zu; reservation %zu\n",
+		secs, blk_size, blk_cnt, reservation);
 	printf("TX threads %zu; RX threads %zu\n",
 		tx_thread_cnt, rx_thread_cnt);
-	printf("waits: %zu\n", waits);
+	printf("tx blocks %zu; rx blocks %zu; waits %zu\n",
+		tx_i_sum, rx_i_sum, waits);
 	printf("cpu time %.4lfs; wall time %.4lfs\n",
 		nlc_timing_cpu(t), nlc_timing_wall(t));
 
