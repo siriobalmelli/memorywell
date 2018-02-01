@@ -16,6 +16,7 @@ Runs for a fixed time and then reports number of blocks pushed/pulled
 #include <getopt.h>
 #include <nonlibc.h> /* timing */
 
+#include <unistd.h> /* sleep */
 
 static size_t blk_cnt = 256; /* how many blocks in the cbuf */
 const static size_t blk_size = sizeof(size_t); /* in Bytes */
@@ -33,98 +34,107 @@ static size_t waits = 0; /* how many times did threads wait? */
 static uint_fast8_t kill_flag = 0;
 
 
-/*	tx_thread()
+/*	escape
+
+Tell compiler and optimized to keep their hands off 'unused'.
+*/
+static void escape(size_t unused)
+{
+	asm volatile(	""			/* asm */
+			:			/* outputs */
+			: "r" (unused)		/* inputs */
+			: "memory"		/* clobbers */
+	);
+}
+
+
+/*	io_single()
+Single-threaded I/O on one side of a buffer
+	(will NOT contend for this side of buffer,
+	whether multiple threads are contending on the other side).
+*/
+static inline size_t io_single(	struct well *buf,
+				struct well_sym *get,
+				struct well_sym *put)
+{
+	size_t i = 0, pos = 0, res = 0;
+
+	/* loop get -> put
+	Check kill flag after every failure to avoid spinning forever.
+	*/
+	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
+		if ((res = well_reserve(get, &pos, reservation))) {
+			for (size_t j=0; j < res; j++)
+				escape(WELL_DEREF(size_t, pos, j, buf) = i + j);
+			well_release_single(put, res);
+			i += res;
+		} else {
+			FAIL_DO();
+		}
+	}
+
+	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
+	return i;
+}
+
+/*	io_multi()
+Multi-threaded I/O on one side of a buffer (will contend for this side of buffer).
+*/
+static inline size_t io_multi(	struct well *buf,
+				struct well_sym *get,
+				struct well_sym *put)
+{
+	size_t i = 0, pos = 0, res = 0;
+
+	/* loop get -> put
+
+	Funky logic owing to the fact we need to check 'kill_flag'
+		after each failure else risk spinning forever.
+	*/
+	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
+		if (res) {
+			if (well_release_multi(put, res, pos)) {
+				i += res;
+				res = 0;
+			}
+		} else if ((res = well_reserve(get, &pos, reservation))) {
+			for (size_t j=0; j < res; j++)
+				escape(WELL_DEREF(size_t, pos, j, buf) = i + j);
+			continue;
+		}
+		FAIL_DO();
+	}
+
+	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
+	return i;
+}
+
+
+/*
+	tx side
 */
 void *tx_single(void* arg)
 {
 	struct well *buf = arg;
-	size_t i = 0;
-	volatile size_t unused;
-
-	/* loop on TX */
-	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
-		size_t pos, res;
-		while (!(res = well_reserve(&buf->tx, &pos, reservation)))
-			FAIL_DO();
-
-		for (size_t j=0; j < res; j++)
-			unused = WELL_DEREF(size_t, pos, j, buf) = i + j;
-		well_release_single(&buf->rx, res);
-		i += res;
-	}
-
-	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
-	return (void *)i;
+	return (void *)io_single(buf, &buf->tx, &buf->rx);
 }
 void *tx_multi(void* arg)
 {
 	struct well *buf = arg;
-	size_t i = 0;
-	volatile size_t unused;
-
-	/* loop on TX */
-	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
-		size_t pos, res;
-		while (!(res = well_reserve(&buf->tx, &pos, reservation)))
-			FAIL_DO();
-
-		for (size_t j=0; j < res; j++)
-			unused = WELL_DEREF(size_t, pos, j, buf) = i + j;
-
-		while (!well_release_multi(&buf->rx, res, pos))
-			FAIL_DO();
-		i += res;
-	}
-
-	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
-	return (void *)i;
+	return (void *)io_multi(buf, &buf->tx, &buf->rx);
 }
-
-
-/*	rx_thread()
+/*
+	rx side
 */
 void *rx_single(void* arg)
 {
 	struct well *buf = arg;
-	size_t i = 0;
-	volatile size_t unused;
-
-	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
-		size_t pos, res;
-		while (!(res = well_reserve(&buf->rx, &pos, reservation)))
-			FAIL_DO();
-
-		for (size_t j=0; j < res; j++)
-			unused = WELL_DEREF(size_t, pos, j, buf);
-		well_release_single(&buf->tx, res);
-		i += res;
-	}
-
-	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
-	return (void *)i;
+	return (void *)io_single(buf, &buf->rx, &buf->tx);
 }
 void *rx_multi(void* arg)
 {
 	struct well *buf = arg;
-	size_t i = 0;
-	volatile size_t unused;
-
-	/* loop on RX */
-	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
-		size_t pos, res;
-		while (!(res = well_reserve(&buf->rx, &pos, reservation)))
-			FAIL_DO();
-
-		for (size_t j=0; j < res; j++)
-			unused = WELL_DEREF(size_t, pos, j, buf);
-
-		while (!well_release_multi(&buf->tx, res, pos))
-			FAIL_DO();
-		i += res;
-	}
-
-	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
-	return (void *)i;
+	return (void *)io_multi(buf, &buf->rx, &buf->tx);
 }
 
 
