@@ -1,6 +1,6 @@
 #project
 project('memorywell', 'c',
-	version : '0.1.0',
+	version : '0.1.8',
 	default_options : [ 'c_std=gnu11' ])
 description = 'nonblocking circular buffer'
 
