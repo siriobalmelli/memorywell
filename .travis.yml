@@ -13,7 +13,7 @@ matrix:
 before_install:
   # Clone nonlibc repo as memorywell depends on it.
   # TODO: replace this with a nix-channel instead of a download
-  - pushd ~; git clone https://github.com/siriobalmelli/nonlibc.git; popd
+  - pushd ~; git clone --branch=sirio https://github.com/siriobalmelli/nonlibc.git; popd
 
 script:
   - nix-build -I ~

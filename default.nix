@@ -2,11 +2,11 @@
 	system ? builtins.currentSystem,
 	nixpkgs ? import <nixpkgs> { inherit system; },
 	nonlibc ? nixpkgs.nonlibc or import <nonlibc> { inherit system;
-												inherit buildtype;
-												inherit compiler;
-												inherit lib_type;
-												inherit dep_type;
-												inherit mesonFlags;
+							inherit buildtype;
+							inherit compiler;
+							inherit lib_type;
+							inherit dep_type;
+							inherit mesonFlags;
 	},
 	# options
 	buildtype ? "release",
@@ -27,7 +27,7 @@ stdenv.mkDerivation rec {
 	# build-only deps
 	nativeBuildInputs = [
 		(lowPrio gcc)
-		(lowPrio clang-tools)
+		clang-tools
 		clang
 		cscope
 		meson
