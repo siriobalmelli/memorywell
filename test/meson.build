@@ -17,7 +17,7 @@ foreach t : tests
 
 	a_test = executable(name + '_shared', t,
 		    include_directories : inc,
-		    link_with : well_shared,
+		    link_with : well,
 		    dependencies : [ deps, thread_dep ])
 	test(name_spaced + ' (shared)', a_test)
 

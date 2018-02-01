@@ -4,14 +4,12 @@
 	nonlibc ? nixpkgs.nonlibc or import <nonlibc> { inherit system;
 							inherit buildtype;
 							inherit compiler;
-							inherit lib_type;
 							inherit dep_type;
 							inherit mesonFlags;
 	},
 	# options
 	buildtype ? "release",
 	compiler ? "clang",
-	lib_type ? "shared",
 	dep_type ? "shared",
 	mesonFlags ? ""
 }:
@@ -54,15 +52,11 @@ stdenv.mkDerivation rec {
 	});
 
 	# don't harden away position-dependent speedups for static builds
-	hardeningDisable = if lib_type == "static" then
-		[ "pic" "pie" ]
-	else
-		[];
+	hardeningDisable = [ "pic" "pie" ];
 
 	# build
 	mFlags = mesonFlags
 		+ " --buildtype=${buildtype}"
-		+ " -Dlib_type=${lib_type}"
 		+ " -Ddep_type=${dep_type}";
 
 	configurePhase = ''

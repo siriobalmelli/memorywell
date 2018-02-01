@@ -38,17 +38,17 @@ endif
 # deps are either statically or dynamically incorporated;
 #+	see meson_options.txt for the default value, which can be overridden
 #+	with a -Ddep_type=["shared"||"static"] flag when running meson.
+
+dep_static = false
 _dep = get_option('dep_type')
-if _dep == 'shared'
-	dep_shared = true
-elif _dep == 'static'
-	dep_shared = false
-else
-	error('-Ddep_type expects "shared" or "static"; got ' + _dep)
+if _dep == 'static'
+	dep_static = true
 endif
-# insert deps here
-nonlibc = dependency('nonlibc', static: not dep_shared, version : '>=0.1.7',
-		fallback : ['nonlibc', 'nonlibc_dep'], required : true)
+
+# Insert deps here
+# Note that subproject expected to export as '[name]_dep_[shared||static]'
+nonlibc = dependency('nonlibc', static: dep_static, version : '>=0.1.8',
+		fallback : ['nonlibc', 'nonlibc_dep_' + _dep ], required : true)
 
 
 # All deps in a single arg. Use THIS ONE in compile calls
