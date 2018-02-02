@@ -19,7 +19,7 @@ Not good for benchmarking speed: uses a fixed number of runs
 #include <nonlibc.h> /* timing */
 
 
-static size_t numiter = 10000000;
+static size_t numiter = 1000000;
 static size_t blk_cnt = 256; /* how many blocks in the cbuf */
 const static size_t blk_size = sizeof(size_t); /* in Bytes */
 
