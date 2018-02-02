@@ -12,6 +12,6 @@ before_install:
   - pushd ~; git clone https://github.com/siriobalmelli/nonlibc.git; popd
 
 script:
-  - nix-shell -I ~ -p nix-info --run "nix-info -m"
+  - nix-shell -p nix-info --run "nix-info -m"
   - nix-build -I ~
 ...
