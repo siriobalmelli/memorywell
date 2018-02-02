@@ -67,7 +67,9 @@ stdenv.mkDerivation rec {
 		''; 
 
 	buildPhase = "ninja";
-	doCheck = true;
-	checkPhase = "ninja test";
+	doCheck = false;
 	installPhase = "ninja install";
+	# test after install to avoid OS X dyld barf
+	doInstallCheck = true;
+	installCheckPhase = "ninja test";
 }
