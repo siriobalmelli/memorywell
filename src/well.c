@@ -121,53 +121,61 @@ out:
 }
 
 
-
 /*	well_reserve()
 Reserve up to 'max_count' buffer blocks;
 	single OR multiple producers/consumers.
 
-Returns number of slots reserved; writes an opaque
-	"position" variable into '*out_pos'.
-Use _access() with '*out_pos' to obtain valid pointers.
+Returns a 'struct well_res' containing:
+	- number of slots reserved as 'cnt'
+	- an opaque "position" variable as 'pos'.
 
-On failure, returns 0 and '*out_pos' is garbage.
+Use _access() functions with 'pos' to obtain valid pointers.
+
+On failure, 'cnt == 0' and 'pos' is garbage.
 
 NOTE ON TIMING: will not wait; will not spin.
 	Caller decides whether to sleep(), yield() or whatever.
 */
-size_t well_reserve(struct well_sym	*from,
-			size_t		*out_pos,
-			size_t		max_count)
+struct well_res	well_reserve(	struct well_sym	*from,
+				size_t		max_count)
 {
+	/* Don't waste cycles setting this; but must ASSUME it's garbage
+		until explicitly set.
+	*/
+	struct well_res ret;
+
 #if (WELL_TECHNIQUE == WELL_DO_CAS)
-	/* fail early and cheaply */
-	size_t count = __atomic_load_n(&from->avail, __ATOMIC_RELAXED);
+	ret.cnt = __atomic_load_n(&from->avail, __ATOMIC_RELAXED);
 	do {
-		if (!count)
-			return 0;
-		if (count < max_count)
-			max_count = count;
-	} while (!(__atomic_compare_exchange_n(&from->avail, &count, count - max_count,
+		/* fail early and cheaply */
+		if (!ret.cnt)
+			return ret;
+		/* prevent CAS'ing a negative integer into 'avail' */
+		if (ret.cnt < max_count)
+			max_count = ret.cnt;
+	} while (!(__atomic_compare_exchange_n(&from->avail, &ret.cnt, ret.cnt - max_count,
 						1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED)));
-	*out_pos = __atomic_fetch_add(&from->pos, max_count, __ATOMIC_RELAXED);
-	return max_count;
+	ret.pos = __atomic_fetch_add(&from->pos, max_count, __ATOMIC_RELAXED);
+	/* penalty for failing cheaply: succeed expensively */
+	ret.cnt = max_count;
+	return ret;
 
 
 #elif (WELL_TECHNIQUE == WELL_DO_XCH)
-	size_t count = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
-	if (!count)
-		return 0;
+	ret.cnt = __atomic_exchange_n(&from->avail, 0, __ATOMIC_ACQUIRE);
+	if (!ret.cnt)
+		return ret;
 
-	if (count > max_count) {
-		__atomic_fetch_add(&from->avail, count-max_count, __ATOMIC_RELAXED);
-		count = max_count;
+	if (ret.cnt > max_count) {
+		__atomic_fetch_add(&from->avail, ret.cnt-max_count, __ATOMIC_RELAXED);
+		ret.cnt = max_count;
 	}
-	*out_pos = __atomic_fetch_add(&from->pos, count, __ATOMIC_RELAXED);
-	return count;
+	ret.pos = __atomic_fetch_add(&from->pos, ret.cnt, __ATOMIC_RELAXED);
+	return ret;
 
 
 #elif (WELL_TECHNIQUE == WELL_DO_MTX || WELL_TECHNIQUE == WELL_DO_SPL)
-	size_t ret = 0;
+	ret.cnt = 0;
 	if (!TRYLOCK_(&from->lock)) {
 		if (from->avail) {
 			if (from->avail < max_count) {
@@ -176,9 +184,9 @@ size_t well_reserve(struct well_sym	*from,
 			} else {
 				from->avail -= max_count;
 			}
-			*out_pos = from->pos;
+			ret.pos = from->pos;
 			from->pos += max_count;
-			ret = max_count;
+			ret.cnt = max_count;
 		}
 		UNLOCK_(&from->lock);
 	}

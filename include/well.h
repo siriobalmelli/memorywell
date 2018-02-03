@@ -156,10 +156,20 @@ NLC_PUBLIC void	well_deinit(	struct well	*buf);
 /*
 	reserve
 */
-NLC_PUBLIC __attribute__((warn_unused_result))
-	size_t well_reserve(	struct well_sym	*from,
-				size_t		*out_pos,
-				size_t		max_count);
+
+/*	well_res
+Describe a reservation in such a way that it can be returned as
+	two registers instead of using a pointer for 'out_pos'
+*/
+struct well_res
+{
+	size_t cnt;	/* number of blocks reserved */
+	size_t pos;	/* opaque value: feed back into e.g.: well_access() */
+};
+
+NLC_PUBLIC __attribute__((warn_unused_result)) struct well_res
+	well_reserve(	struct well_sym	*from,
+			size_t		max_count);
 
 /*
 	release

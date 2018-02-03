@@ -7,7 +7,6 @@ thread_dep = dependency('threads')
 
 tests = [
   'well_test.c',
-  'well_bench.c',
   'well_validate.c'
 ]
 
