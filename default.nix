@@ -15,7 +15,7 @@
 }:
 
 # note that "nonlibc" above should not be clobbered by this
-with nixpkgs;
+with import <nixpkgs> { inherit system; };
 
 stdenv.mkDerivation rec {
 	name = "memorywell";
