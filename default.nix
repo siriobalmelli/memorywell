@@ -1,7 +1,7 @@
 { 	# deps
 	system ? builtins.currentSystem,
 	nixpkgs ? import <nixpkgs> { inherit system; },
-	nonlibc ? nixpkgs.nonlibc or import <nonlibc> { inherit system;
+	nonlibc ? nixpkgs.nonlibc or import ../nonlibc { inherit system;
 							inherit buildtype;
 							inherit compiler;
 							inherit dep_type;
