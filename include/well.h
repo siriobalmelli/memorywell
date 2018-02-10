@@ -179,6 +179,5 @@ NLC_PUBLIC void	well_release_single(	struct well_sym	*to,
 
 NLC_PUBLIC __attribute__((warn_unused_result))
 	size_t	well_release_multi(	struct well_sym	*to,
-					size_t		count,
-					size_t		res_pos);
+					struct well_res	res);
 #endif /* well_h_ */

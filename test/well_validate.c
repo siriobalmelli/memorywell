@@ -26,7 +26,7 @@ int test_zero(struct well *buf)
 	res = well_reserve(&buf->rx, 0);
 	Z_err_if(res.cnt, "reserve 0 returned %zu", res.cnt);
 	size_t ret;
-	ret = well_release_multi(&buf->tx, 0, res.pos);
+	ret = well_release_multi(&buf->tx, res);
 	Z_err_if(ret, "release 0 returned %zu", ret);
 
 	Z_err_if(memcmp(&state, buf, sizeof(state)), "nop must not alter state");

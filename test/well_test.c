@@ -74,7 +74,7 @@ void *tx_multi(void* arg)
 		for (size_t j=0; j < res.cnt; j++)
 			tally += WELL_DEREF(size_t, res.pos, j, buf) = i + j;
 
-		while (!well_release_multi(&buf->rx, res.cnt, res.pos))
+		while (!well_release_multi(&buf->rx, res))
 			FAIL_DO();
 	}
 
@@ -128,7 +128,7 @@ void *rx_multi(void* arg)
 			tally += temp;
 		}
 
-		while (!well_release_multi(&buf->tx, res.cnt, res.pos))
+		while (!well_release_multi(&buf->tx, res))
 			FAIL_DO();
 	}
 

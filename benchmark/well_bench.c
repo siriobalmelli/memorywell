@@ -95,7 +95,7 @@ static size_t io_multi(	struct well *buf,
 	*/
 	while (! __atomic_load_n(&kill_flag, __ATOMIC_RELAXED)) {
 		if (res.cnt) {
-			if (well_release_multi(put, res.cnt, res.pos)) {
+			if (well_release_multi(put, res)) {
 				i += res.cnt;
 				res.cnt = 0;
 			}

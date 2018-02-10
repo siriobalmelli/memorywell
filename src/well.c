@@ -241,25 +241,24 @@ WARNINGS:
 returns 0 on failure, original value of 'count' on success.
 */
 size_t	well_release_multi(struct well_sym	*to,
-				size_t		count,
-				size_t		res_pos)
+			struct well_res		res)
 {
 #if (WELL_TECHNIQUE == WELL_DO_CAS || WELL_TECHNIQUE == WELL_DO_XCH)
-	if (!__atomic_compare_exchange_n(&to->release_pos, &res_pos, res_pos + count,
+	if (!__atomic_compare_exchange_n(&to->release_pos, &res.pos, res.pos + res.cnt,
 					0, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
 		return 0;
 
-	__atomic_add_fetch(&to->avail, count, __ATOMIC_RELEASE);
-	return count;
+	__atomic_add_fetch(&to->avail, res.cnt, __ATOMIC_RELEASE);
+	return res.cnt;
 
 
 #elif (WELL_TECHNIQUE == WELL_DO_MTX || WELL_TECHNIQUE == WELL_DO_SPL)
 	size_t ret = 0;
 	if (!TRYLOCK_(&to->lock)) {
-		if (to->release_pos == res_pos) {
-			to->avail += count;
-			to->release_pos += count;
-			ret = count;
+		if (to->release_pos == res.pos) {
+			to->avail += res.cnt;
+			to->release_pos += res.cnt;
+			ret = res.cnt;
 		}
 		UNLOCK_(&to->lock);
 	}
