@@ -15,7 +15,7 @@
 }:
 
 # note that "nonlibc" above should not be clobbered by this
-with nixpkgs;
+with import <nixpkgs> { inherit system; };
 
 stdenv.mkDerivation rec {
 	name = "memorywell";
@@ -67,7 +67,13 @@ stdenv.mkDerivation rec {
 		''; 
 
 	buildPhase = "ninja";
-	doCheck = true;
-	checkPhase = "ninja test";
+	doCheck = false;
 	installPhase = "ninja install";
+	# test after install to try and avoid OS X dyld barf ?
+	doInstallCheck = true;
+	installCheckPhase = ''
+		export LD_DYLD_PATH=$out:$LD_DYLD_PATH
+		env | grep DYLD
+		ninja test
+		'';
 }
