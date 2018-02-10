@@ -145,7 +145,6 @@ def  summate_runs(runs):
 	avgs_ops1 = col.OrderedDict({ k : st.mean(v) for k,v in avgs_ops.items() })
 #	print(avgs_ops)	
 	return avgs_ops1
-
 #(('1/48', '1', '48', 'WELL_DO_XCH-BOUNDED;', '1', '1'), ('cpu time 0.6633', 'wall time 0.3321'))
 
 # Do not use Xwindows;
@@ -248,24 +247,6 @@ def  human_format(num):
         magnitude += 1
         num /= 1000.0
     return '%.0f %s' % (num, [ '', 'K', 'M', 'G', 'T', 'P'][magnitude])
-
-def print_usage():
-	print('./memwell_bench -r <number of benchmark iterations>')
-
-def parse_opts(opts):
-	iterations = 5
-	for o, arg in opts:
-		if o in ('-r', '--runs'):
-			iterations = int(arg)
-		elif o in ('-h', '--help'):
-			print_usage()
-			sys.exit(0)
-		else:
-			print('no such option')
-	
-	return iterations
-
-import sys, getopt
 
 def print_usage():
 	print('./memwell_bench -r <number of benchmark iterations>')
