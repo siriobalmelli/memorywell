@@ -67,13 +67,10 @@ stdenv.mkDerivation rec {
 		''; 
 
 	buildPhase = "ninja";
-	doCheck = false;
-	installPhase = "ninja install";
-	# test after install to try and avoid OS X dyld barf ?
-	doInstallCheck = true;
-	installCheckPhase = ''
-		export LD_DYLD_PATH=$out:$LD_DYLD_PATH
-		env | grep DYLD
+	doCheck = true;
+	checkPhase = ''
+		otool -l test/well_test_shared
 		ninja test
-		'';
+	'';
+	installPhase = "ninja install";
 }
