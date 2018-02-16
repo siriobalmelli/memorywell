@@ -25,6 +25,18 @@ pkg.generate(libraries : [ well_static, well ],
 		filebase : meson.project_name(),
 		description : description)
 
-# export in case called as a meson subproject
-well_dep_shared = declare_dependency(link_with : well, include_directories : inc)
-well_dep_static = declare_dependency(link_with : well_static, include_directories : inc)
+#   Export a static dependency (straightforward)
+well_dep_static = declare_dependency(link_with : well_static,
+					include_directories : inc,
+					dependencies : deps)
+
+#   Export a shared dependency (a royal pain).
+#
+# Force dependers to have an rpath entry pointing to where we KNOW we'll install.
+# This fixes both Nix and non-nix projects (providing 'prefix' is set correctly),
+#+  and does OPAQUELY (depender doesn't have to add an 'install_rpath' directive).
+rpath = get_option('prefix') + '/' + get_option('libdir')
+well_dep_shared = declare_dependency(link_with : well,
+					include_directories : inc,
+					dependencies : deps,
+					link_args : '-Wl,-rpath,' + rpath)

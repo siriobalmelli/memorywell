@@ -47,9 +47,7 @@ stdenv.mkDerivation rec {
 
 	# Override the setupHook in the meson nix derviation,
 	# so that meson doesn't automatically get invoked from there.
-	meson = pkgs.meson.overrideAttrs ( oldAttrs: rec {
-		setupHook = "";
-	});
+	meson = pkgs.meson.overrideAttrs ( oldAttrs: rec { setupHook = ""; });
 
 	# don't harden away position-dependent speedups for static builds
 	hardeningDisable = [ "pic" "pie" ];
@@ -68,9 +66,7 @@ stdenv.mkDerivation rec {
 
 	buildPhase = "ninja";
 	doCheck = true;
-	checkPhase = ''
-		otool -l test/well_test_shared
-		ninja test
-	'';
+	checkPhase = "ninja test";
+	#checkPhase = "otool -l test/well_test_shared";
 	installPhase = "ninja install";
 }
