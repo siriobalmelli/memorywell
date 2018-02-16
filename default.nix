@@ -67,6 +67,5 @@ stdenv.mkDerivation rec {
 	buildPhase = "ninja";
 	doCheck = true;
 	checkPhase = "ninja test";
-	#checkPhase = "otool -l test/well_test_shared";
 	installPhase = "ninja install";
 }
