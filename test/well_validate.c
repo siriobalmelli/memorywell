@@ -14,19 +14,21 @@ int test_zero(struct well *buf)
 	struct well state;
 	memcpy(&state, buf, sizeof(struct well));
 
-	size_t pos, ret;
+	struct well_res res;
 		
 	/* single */
-	ret = well_reserve(&buf->tx, &pos, 0);
-	Z_err_if(ret, "reserve 0 returned %zu", ret);
+	res = well_reserve(&buf->tx, 0);
+	Z_err_if(res.cnt, "reserve 0 returned %zu", res.cnt);
 	well_release_single(&buf->rx, 0);
 	Z_err_if(memcmp(&state, buf, sizeof(state)), "nop must not alter state");
 
 	/* multi */
-	ret = well_reserve(&buf->rx, &pos, 0);
-	Z_err_if(ret, "reserve 0 returned %zu", ret);
-	ret = well_release_multi(&buf->tx, 0, pos);
+	res = well_reserve(&buf->rx, 0);
+	Z_err_if(res.cnt, "reserve 0 returned %zu", res.cnt);
+	size_t ret;
+	ret = well_release_multi(&buf->tx, res);
 	Z_err_if(ret, "release 0 returned %zu", ret);
+
 	Z_err_if(memcmp(&state, buf, sizeof(state)), "nop must not alter state");
 
 	return err_cnt;

@@ -47,9 +47,7 @@ stdenv.mkDerivation rec {
 
 	# Override the setupHook in the meson nix derviation,
 	# so that meson doesn't automatically get invoked from there.
-	meson = pkgs.meson.overrideAttrs ( oldAttrs: rec {
-		setupHook = "";
-	});
+	meson = pkgs.meson.overrideAttrs ( oldAttrs: rec { setupHook = ""; });
 
 	# don't harden away position-dependent speedups for static builds
 	hardeningDisable = [ "pic" "pie" ];

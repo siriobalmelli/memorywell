@@ -40,18 +40,18 @@ void *tx_single(void* arg)
 	struct well *buf = arg;
 	size_t tally = 0;
 	size_t num = numiter;
+	struct well_res res = { 0 };
 
 	/* loop on TX */
-	for (size_t i=0, res=0; i < num; i += res) {
+	for (size_t i=0; i < num; i += res.cnt) {
 		size_t ask = i + reservation < num ? reservation : num - i;
 
-		size_t pos;
-		while (!(res = well_reserve(&buf->tx, &pos, ask)))
+		while (!(res = well_reserve(&buf->tx, ask)).cnt)
 			FAIL_DO();
 
-		for (size_t j=0; j < res; j++)
-			tally += WELL_DEREF(size_t, pos, j, buf) = i + j;
-		well_release_single(&buf->rx, res);
+		for (size_t j=0; j < res.cnt; j++)
+			tally += WELL_DEREF(size_t, res.pos, j, buf) = i + j;
+		well_release_single(&buf->rx, res.cnt);
 	}
 
 	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
@@ -62,19 +62,19 @@ void *tx_multi(void* arg)
 	struct well *buf = arg;
 	size_t tally = 0;
 	size_t num = numiter / tx_thread_cnt;
+	struct well_res res = { 0 };
 
 	/* loop on TX */
-	for (size_t i=0, res=0; i < num; i += res) {
+	for (size_t i=0; i < num; i += res.cnt) {
 		size_t ask = i + reservation < num ? reservation : num - i;
 
-		size_t pos;
-		while (!(res = well_reserve(&buf->tx, &pos, ask)))
+		while (!(res = well_reserve(&buf->tx, ask)).cnt)
 			FAIL_DO();
 
-		for (size_t j=0; j < res; j++)
-			tally += WELL_DEREF(size_t, pos, j, buf) = i + j;
+		for (size_t j=0; j < res.cnt; j++)
+			tally += WELL_DEREF(size_t, res.pos, j, buf) = i + j;
 
-		while (!well_release_multi(&buf->rx, res, pos))
+		while (!well_release_multi(&buf->rx, res))
 			FAIL_DO();
 	}
 
@@ -90,20 +90,20 @@ void *rx_single(void* arg)
 	struct well *buf = arg;
 	size_t tally = 0;
 	size_t num = numiter;
+	struct well_res res = { 0 };
 
 	/* loop on RX */
-	for (size_t i=0, res=0; i < num; i += res) {
+	for (size_t i=0; i < num; i += res.cnt) {
 		size_t ask = i + reservation < num ? reservation : num - i;
 
-		size_t pos;
-		while (!(res = well_reserve(&buf->rx, &pos, ask)))
+		while (!(res = well_reserve(&buf->rx, ask)).cnt)
 			FAIL_DO();
 
-		for (size_t j=0; j < res; j++) {
-			size_t temp = WELL_DEREF(size_t, pos, j, buf);
+		for (size_t j=0; j < res.cnt; j++) {
+			size_t temp = WELL_DEREF(size_t, res.pos, j, buf);
 			tally += temp;
 		}
-		well_release_single(&buf->tx, res);
+		well_release_single(&buf->tx, res.cnt);
 	}
 
 	__atomic_fetch_add(&waits, wait_count, __ATOMIC_RELAXED);
@@ -114,21 +114,21 @@ void *rx_multi(void* arg)
 	struct well *buf = arg;
 	size_t tally = 0;
 	size_t num = numiter / rx_thread_cnt;
+	struct well_res res = { 0 };
 
 	/* loop on RX */
-	for (size_t i=0, res=0; i < num; i += res) {
+	for (size_t i=0; i < num; i += res.cnt) {
 		size_t ask = i + reservation < num ? reservation : num - i;
 
-		size_t pos;
-		while (!(res = well_reserve(&buf->rx, &pos, ask)))
+		while (!(res = well_reserve(&buf->rx, ask)).cnt)
 			FAIL_DO();
 
-		for (size_t j=0; j < res; j++) {
-			size_t temp = WELL_DEREF(size_t, pos, j, buf);
+		for (size_t j=0; j < res.cnt; j++) {
+			size_t temp = WELL_DEREF(size_t, res.pos, j, buf);
 			tally += temp;
 		}
 
-		while (!well_release_multi(&buf->tx, res, pos))
+		while (!well_release_multi(&buf->tx, res))
 			FAIL_DO();
 	}
 
