@@ -8,7 +8,10 @@ project('memorywell', 'c',
 description = 'nonblocking circular buffer'
 
 #sanity
-assert(meson.project_name() == 'memorywell', 'Incorrect project name')
+assert(meson.project_name() == 'memorywell',
+			'Incorrect project name')
+assert(meson.version() >= '0.44.0',
+			'Unfortunately, rpath issues in previous versions')
 
 
 #
@@ -50,7 +53,7 @@ endif
 
 # Insert deps here
 # Note that subproject expected to export as '[name]_dep_[shared||static]'
-nonlibc = dependency('nonlibc', static: dep_static, version : '>=0.1.8',
+nonlibc = dependency('nonlibc', static: dep_static, version : '>=0.1.9',
 		fallback : ['nonlibc', 'nonlibc_dep_' + _dep ], required : true)
 
 

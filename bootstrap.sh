@@ -2,7 +2,7 @@
 # Compile and test all variants.
 #+	... if you're missing tools (or running a blank/vanilla system),
 #+	run ./nix-toolchain.sh instead.
-set -e
+FAILS=
 
 # remove existing builds
 rm -rfv ./build-*
@@ -16,7 +16,13 @@ for cc in $compilers; do
 		CC=$cc meson --buildtype=$type $name \
 			&& pushd $name \
 			&& ninja test
-		popd
+		# log if build didn't succeed
+		poop=$?
+		if (( $poop )); then
+			FAILS="${FAILS}$name\n"
+		fi
+		# out regardless
+		popd >/dev/null 2>&1
 	done
 done
 
@@ -40,3 +46,13 @@ cscope -b -q -U -I ./include -s ./src -s ./util -s ./test
 #		&& VALGRIND=1 ninja test
 #	popd
 #done
+
+if [[ $FAILS ]]; then
+	# flush current stdout (if user is watching all logs)
+	echo -ne "\n\n"
+	# output fail list
+	echo -e "FAILS:\n$FAILS" >&2
+	exit 1
+else
+	exit 0
+fi

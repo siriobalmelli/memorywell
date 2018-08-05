@@ -12,8 +12,5 @@ before_install:
   - pushd ~; git clone https://github.com/siriobalmelli/nonlibc.git; popd
 
 script:
-  # TODO: not sure why Travis barfs with
-  #+  'dyld: Library not loaded: @rpath/libnonlibc.dylib'
-  # Cannot reproduce this on an OS X system even using nix-shell --pure
   - nix-build -I ~ --arg dep_type \"static\"
 ...

@@ -113,7 +113,9 @@ threads = col.OrderedDict()
 
 #threads and the avgs_* dicts are both indexed by the benchmark run id 
 
-def summate_runs(runs):
+#threads and the avgs_* dicts are both indexed by the benchmark run id 
+
+def  summate_runs(runs):
 	for k,v in runs.items():
 		for s in v:
 			# s[1] is the number of the benchmark run out of X runs
@@ -140,11 +142,9 @@ def summate_runs(runs):
 						avgs_ops[key].append(int(l[0]))
 					else:
 						avgs_ops[key] = [ int(l[0]) ]
-
 	avgs_ops1 = col.OrderedDict({ k : st.mean(v) for k,v in avgs_ops.items() })
 #	print(avgs_ops)	
 	return avgs_ops1
-
 #(('1/48', '1', '48', 'WELL_DO_XCH-BOUNDED;', '1', '1'), ('cpu time 0.6633', 'wall time 0.3321'))
 
 # Do not use Xwindows;
@@ -210,7 +210,6 @@ def make_plots(cpu_time, chart_suffix, y_label_name, seconds = 5):
 	y_min = min(powers_of_ten)
 	y_max = max(powers_of_ten)
 	ax.set_ylabel('operations per second')
-
 	# make sure the arrays are sorted by the thread count (keys)
 	lin_y_mtx_sorted = col.OrderedDict(sorted(lin_y_mtx.items(), key=lambda item: item))
 	lin_y_xch_sorted = col.OrderedDict(sorted(lin_y_xch.items(), key=lambda item: item))
@@ -292,6 +291,5 @@ def main():
 	make_plots(avgs_ops, '_YIELD', 'operations')
 	make_plots(avgs_ops, '_SPIN', 'operations')
 	make_plots(avgs_ops, '_SLEEP', 'operations')
-
 if __name__ == "__main__":
 	main()
