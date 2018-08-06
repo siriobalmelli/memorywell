@@ -22,7 +22,7 @@ with nixpkgs;
 
 stdenv.mkDerivation rec {
   name = "memorywell";
-  version = "0.1.10";
+  version = "0.1.11";
   meta = with stdenv.lib; {
     description = "nonblocking circular buffer";
     homepage = https://siriobalmelli.github.io/memorywell/;
@@ -35,7 +35,6 @@ stdenv.mkDerivation rec {
 
   buildInputs = [
     clang
-    liburcu
     meson
     ninja
     nonlibc
@@ -63,9 +62,6 @@ stdenv.mkDerivation rec {
     + " -Ddep_type=${dep_type}";
 
   configurePhase = ''
-      echo "------------------ build env --------------------------"
-      env
-      echo "-------------------------------------------------------"
       echo "flags: $mFlags"
       echo "prefix: $out"
       CC=${compiler} meson --prefix=$out build $mFlags
@@ -82,7 +78,7 @@ stdenv.mkDerivation rec {
 
   # Build packages outside $out then move them in: fpm seems to ignore
   #+	the '-x' flag that we need to avoid packaging packages inside packages
-  fixupPhase = ''
+  postFixup = ''
       mkdir temp
       for pk in "deb" "rpm" "tar" "zip"; do
           if ! fpm -f -t $pk -s dir -p temp/ -n $name -v $version \
@@ -102,5 +98,7 @@ stdenv.mkDerivation rec {
   # Allow YouCompleteMe and other tooling to see into the byzantine
   #+	labyrinth of library includes.
   # TODO: this string manipulation ought to be done in Nix.
-  shellHook=''export CPATH=$(echo $NIX_CFLAGS_COMPILE | sed "s/ \?-isystem /:/g")'';
+  shellHook = ''
+      export CPATH=$(echo $NIX_CFLAGS_COMPILE | sed "s/ \?-isystem /:/g")
+  '';
 }
