@@ -1,25 +1,28 @@
-{ # deps
-  system ? builtins.currentSystem,
-  nixpkgs ? import <nixpkgs> { inherit system; },
-  nonlibc ? nixpkgs.nonlibc or import <nonlibc> { inherit system;
-    inherit buildtype;
-    inherit compiler;
-    inherit dep_type;
-    inherit mesonFlags;
-  },
+{
   # options
   buildtype ? "release",
   compiler ? "clang",
   dep_type ? "shared",
-  mesonFlags ? ""
+  mesonFlags ? "",
+
+  # deps
+  system ? builtins.currentSystem,
+  nixpkgs ? import <nixpkgs> { inherit system; },
+  nonlibc ? (nixpkgs.nonlibc or import <nonlibc> {
+    inherit system;
+    inherit buildtype;
+    inherit compiler;
+    inherit dep_type;
+    inherit mesonFlags;
+  }),
 }:
 
 # note that "nonlibc" above should not be clobbered by this
-with import <nixpkgs> { inherit system; };
+with nixpkgs;
 
 stdenv.mkDerivation rec {
   name = "memorywell";
-  version = "0.1.9";
+  version = "0.1.10";
   meta = with stdenv.lib; {
     description = "nonblocking circular buffer";
     homepage = https://siriobalmelli.github.io/memorywell/;
@@ -28,11 +31,11 @@ stdenv.mkDerivation rec {
     maintainers = [ "https://github.com/siriobalmelli" ];
   };
 
-  #env = buildEnv { name = name; paths = nativeBuildInputs; };
   outputs = [ "out" ];
 
   buildInputs = [
     clang
+    liburcu
     meson
     ninja
     nonlibc
@@ -69,9 +72,13 @@ stdenv.mkDerivation rec {
       cd build
   '';
 
-  buildPhase = "ninja";
+  buildPhase = ''
+      ninja
+  '';
   doCheck = false;
-  installPhase = "ninja install";
+  installPhase = ''
+      ninja install
+  '';
 
   # Build packages outside $out then move them in: fpm seems to ignore
   #+	the '-x' flag that we need to avoid packaging packages inside packages
