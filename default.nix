@@ -1,12 +1,6 @@
 { 	# deps
 	system ? builtins.currentSystem,
 	nixpkgs ? import <nixpkgs> { inherit system; },
-	nonlibc ? nixpkgs.nonlibc or import <nonlibc> { inherit system;
-							inherit buildtype;
-							inherit compiler;
-							inherit dep_type;
-							inherit mesonFlags;
-	},
 	# options
 	buildtype ? "release",
 	compiler ? "clang",
@@ -14,7 +8,6 @@
 	mesonFlags ? ""
 }:
 
-# note that "nonlibc" above should not be clobbered by this
 with import <nixpkgs> { inherit system; };
 
 stdenv.mkDerivation rec {
@@ -36,6 +29,8 @@ stdenv.mkDerivation rec {
 		valgrind
 		which
 	];
+
+	nonlibc = nixpkgs.nonlibc or import ./nonlibc {};
 
 	# runtime deps
 	buildInputs = [

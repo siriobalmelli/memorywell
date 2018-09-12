@@ -5,13 +5,4 @@ matrix:
   include:
     - os: osx
     - os: linux
-
-before_install:
-  # Clone nonlibc repo as memorywell depends on it.
-  # TODO: replace this with a nix-channel instead of a download
-  - pushd ~; git clone https://github.com/siriobalmelli/nonlibc.git; popd
-
-script:
-  - nix-shell -p nix-info --run "nix-info -m"
-  - nix-build -I ~
 ...
