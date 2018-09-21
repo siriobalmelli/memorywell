@@ -7,23 +7,13 @@
 
   # deps
   system ? builtins.currentSystem,
-  nixpkgs ? import <nixpkgs> { inherit system; },
-  nonlibc ? (nixpkgs.nonlibc or import <nonlibc> {
-    inherit system;
-    inherit buildtype;
-    inherit compiler;
-    inherit dep_type;
-    inherit mesonFlags;
-  }),
+  nixpkgs ? import <nixpkgs> { inherit system; }
 }:
 
-# note that "nonlibc" above should not be clobbered by this
-with nixpkgs;
-
-stdenv.mkDerivation rec {
+nixpkgs.stdenv.mkDerivation rec {
   name = "memorywell";
   version = "0.1.11";
-  meta = with stdenv.lib; {
+  meta = with nixpkgs.stdenv.lib; {
     description = "nonblocking circular buffer";
     homepage = https://siriobalmelli.github.io/memorywell/;
     license = licenses.lgpl21Plus;
@@ -33,17 +23,19 @@ stdenv.mkDerivation rec {
 
   outputs = [ "out" ];
 
+  nonlibc = nixpkgs.nonlibc or import ./nonlibc {};
   buildInputs = [
-    clang
-    meson
-    ninja
     nonlibc
-    pandoc
-    pkgconfig
-    dpkg
-    fpm
-    rpm
-    zip
+
+    nixpkgs.clang
+    nixpkgs.meson
+    nixpkgs.ninja
+    nixpkgs.pandoc
+    nixpkgs.pkgconfig
+    nixpkgs.dpkg
+    nixpkgs.fpm
+    nixpkgs.rpm
+    nixpkgs.zip
   ];
 
   # just work with the current directory (aka: Git repo), no fancy tarness
@@ -51,7 +43,7 @@ stdenv.mkDerivation rec {
 
   # Override the setupHook in the meson nix derivation,
   # so that meson doesn't automatically get invoked from there.
-  meson = pkgs.meson.overrideAttrs ( oldAttrs: rec { setupHook = ""; });
+  meson = nixpkgs.pkgs.meson.overrideAttrs ( oldAttrs: rec { setupHook = ""; });
 
   # don't harden away position-dependent speedups for static builds
   hardeningDisable = [ "pic" "pie" ];
