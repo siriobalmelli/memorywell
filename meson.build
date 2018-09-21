@@ -1,6 +1,9 @@
-#project
+# NOTE this metadata DUPLICATED in 'default.nix'. We must MANUALLY sync both because:
+#   - The Meson build setup must stand alone adn *not* depend on Nix
+#   - Sirio sees no way to have Nix parse these variables when building the derivation
 project('memorywell', 'c',
-	version : '0.1.8',
+	version : '0.1.11',
+	license : 'LGPL-2.1+',
 	default_options : [ 'c_std=gnu11' ])
 description = 'nonblocking circular buffer'
 
