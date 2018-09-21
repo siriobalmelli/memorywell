@@ -8,7 +8,7 @@ thread_counts = [ '1', '2', '3', '4', '8', '16' ]
 foreach t : techniques
   foreach d : fail_strat
     name = '_'.join(['B', 'WELL', t.split('_')[-1], d.split('_')[-1]])
-    a_bench = executable(name, [ 'well_bench.c', '../src/well.c' ],
+    a_bench = executable(name, [ 'well_bench.c', '../lib/well.c' ],
 			include_directories : inc,
 			dependencies : [ deps, thread_dep ],
 			c_args : [ '-DWELL_FAIL_METHOD=' + d, '-DWELL_TECHNIQUE=' + t])

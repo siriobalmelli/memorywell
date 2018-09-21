@@ -17,13 +17,18 @@ well_static = static_library(meson.project_name(),
 			install : true,
 			dependencies : deps)
 
-# don't set anything here, rely on variables declared in toplevel file
+# Force install_dir to avoid e.g. lib/x86_64-linux-gnu/pkgconfig on Ubuntu,
+#+ which breaks other tools like Nix.
 pkg = import('pkgconfig')
-pkg.generate(libraries : [ well_static, well ],
+pkg.generate(	libraries : [well_static, well],
+		requires : deps,
+		install_dir : get_option('prefix') + '/lib/pkgconfig',
 		name : meson.project_name(),
-		version : meson.project_version(),
 		filebase : meson.project_name(),
-		description : description)
+		version : meson.project_version(),
+		description : description,
+		url : homepage
+)
 
 #   Export a static dependency (straightforward)
 well_dep_static = declare_dependency(link_with : well_static,

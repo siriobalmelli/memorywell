@@ -2,10 +2,11 @@
 #   - The Meson build setup must stand alone adn *not* depend on Nix
 #   - Sirio sees no way to have Nix parse these variables when building the derivation
 project('memorywell', 'c',
-	version : '0.1.11',
+	version : '0.2.0',
 	license : 'LGPL-2.1+',
 	default_options : [ 'c_std=gnu11' ])
 description = 'nonblocking circular buffer'
+homepage = 'https://siriobalmelli.github.io/memorywell/'
 
 #sanity
 assert(meson.project_name() == 'memorywell',
@@ -56,14 +57,12 @@ endif
 nonlibc = dependency('nonlibc', static: dep_static, version : '>=0.1.9',
 		fallback : ['nonlibc', 'nonlibc_dep_' + _dep ], required : true)
 
-
 # All deps in a single arg. Use THIS ONE in compile calls
-deps = [ nonlibc ]
-
+deps = [nonlibc]
 
 #build
 inc = include_directories('include')
 subdir('include')
-subdir('src')
+subdir('lib')
 subdir('test')
 subdir('benchmark')

@@ -36,7 +36,7 @@ techniques = [ 'WELL_DO_CAS', 'WELL_DO_XCH', 'WELL_DO_MTX', 'WELL_DO_SPL' ]
 base_args = [ '-c', '1024', '-n', '900000', '-r', '100' ]
 
 foreach t : techniques
-  a_test = executable(t, [ 'well_test.c', '../src/well.c' ],
+  a_test = executable(t, [ 'well_test.c', '../lib/well.c' ],
 		      include_directories : inc,
 		      dependencies : [ deps, thread_dep ],
 		      c_args : [ '-DWELL_TECHNIQUE=' + t])
