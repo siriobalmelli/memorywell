@@ -28,6 +28,7 @@ nixpkgs.stdenv.mkDerivation rec {
     nonlibc
 
     nixpkgs.clang
+    nixpkgs.gcc
     nixpkgs.meson
     nixpkgs.ninja
     nixpkgs.pandoc
@@ -85,12 +86,5 @@ nixpkgs.stdenv.mkDerivation rec {
       done
       mkdir -p $out/var/cache/packages
       mv -fv temp/* $out/var/cache/packages/
-  '';
-
-  # Allow YouCompleteMe and other tooling to see into the byzantine
-  #+	labyrinth of library includes.
-  # TODO: this string manipulation ought to be done in Nix.
-  shellHook = ''
-      export CPATH=$(echo $NIX_CFLAGS_COMPILE | sed "s/ \?-isystem /:/g")
   '';
 }
