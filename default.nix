@@ -12,7 +12,7 @@
 
 nixpkgs.stdenv.mkDerivation rec {
   name = "memorywell";
-  version = "0.2.0";
+  version = "0.2.1";
   meta = with nixpkgs.stdenv.lib; {
     description = "nonblocking circular buffer";
     homepage = https://siriobalmelli.github.io/memorywell/;
