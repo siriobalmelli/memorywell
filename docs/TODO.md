@@ -5,6 +5,7 @@ order: 0
 
 # TODO
 
+- implement futexes
 - EVENTING as a failure method
 - speed differential if combining cache lines (actual impact of false sharing)?
 - generic nmath functions so 32-bit size_t case is cared for
