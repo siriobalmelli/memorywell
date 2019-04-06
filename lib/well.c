@@ -1,4 +1,4 @@
-#include <zed_dbg.h>
+#include <ndebug.h>
 #include <well.h>
 #include <nmath.h>
 
@@ -52,25 +52,25 @@ int well_params(size_t blk_size, size_t blk_cnt, struct well *out)
 
 	/* should go away by the time compiler is through with it :P */
 	out->ct.blk_size = nm_next_pow2_64(blk_size);
-	Z_die_if(out->ct.blk_size < blk_size, "blk_size %zu overflow", blk_size);
+	NB_die_if(out->ct.blk_size < blk_size, "blk_size %zu overflow", blk_size);
 	/* left-shift when multiplying by block size */
 	out->ct.blk_shift = nm_bit_pos(out->ct.blk_size) -1;
 
 	size_t size;
 	/* final size is not abortive */
-	Z_die_if(__builtin_mul_overflow(out->ct.blk_size, blk_cnt, &size),
+	NB_die_if(__builtin_mul_overflow(out->ct.blk_size, blk_cnt, &size),
 		"%zu many %zu-sized blocks overflows",
 		out->ct.blk_size, blk_cnt);
 	/* final size must be a power of 2 */
 	out->ct.overflow = nm_next_pow2_64(size);
-	Z_die_if(out->ct.overflow < size, "buffer size %zu overflow", size);
+	NB_die_if(out->ct.overflow < size, "buffer size %zu overflow", size);
 
 	/* mark available block-count */
 	out->tx.avail = out->ct.overflow >> out->ct.blk_shift;
 	/* turn size into a bitmask */
 	out->ct.overflow--;
 
-out:
+die:
 	return err_cnt;
 }
 
@@ -89,21 +89,21 @@ returns 0 on success
 int well_init(struct well *buf, void *mem)
 {
 	int err_cnt = 0;
-	Z_die_if(!buf, "");
+	NB_die_if(!buf, "");
 	buf->tx.release_pos = buf->rx.release_pos = 0;
 
-	Z_die_if(!mem, "");
+	NB_die_if(!mem, "");
 	buf->ct.buf = mem;
 
 
 #if (WELL_TECHNIQUE == WELL_DO_MTX)
-	Z_die_if(pthread_mutex_init(&buf->tx.lock, NULL), "");
-	Z_die_if(pthread_mutex_init(&buf->rx.lock, NULL), "");
+	NB_die_if(pthread_mutex_init(&buf->tx.lock, NULL), "");
+	NB_die_if(pthread_mutex_init(&buf->rx.lock, NULL), "");
 #elif (WELL_TECHNIQUE == WELL_DO_SPL)
 	buf->tx.lock = buf->rx.lock = 0;
 #endif
 
-out:
+die:
 	return err_cnt;
 }
 
@@ -113,9 +113,9 @@ out:
 void well_deinit(struct well *buf)
 {
 #if (WELL_TECHNIQUE == WELL_DO_MTX)
-	Z_die_if(pthread_mutex_destroy(&buf->tx.lock), "");
-	Z_die_if(pthread_mutex_destroy(&buf->rx.lock), "");
-out:
+	NB_die_if(pthread_mutex_destroy(&buf->tx.lock), "");
+	NB_die_if(pthread_mutex_destroy(&buf->rx.lock), "");
+die:
 	return;
 #endif
 }

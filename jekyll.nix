@@ -12,6 +12,8 @@ in
     name = "jekyll_env";
     buildInputs = [ jekyll_env ];
 
+    src = if lib.inNixShell then null else nix-gitignore.gitignoreSource [] ./.;
+
     shellHook = ''
       exec ${jekyll_env}/bin/jekyll serve --watch
     '';

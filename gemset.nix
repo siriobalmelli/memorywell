@@ -59,15 +59,6 @@
     };
     version = "1.0.5";
   };
-  em-websocket = {
-    dependencies = ["eventmachine" "http_parser.rb"];
-    source = {
-      remotes = ["https://rubygems.org"];
-      sha256 = "1bsw8vjz0z267j40nhbmrvfz7dvacq4p0pagvyp17jif6mj6v7n3";
-      type = "gem";
-    };
-    version = "0.5.1";
-  };
   ethon = {
     dependencies = ["ffi"];
     source = {
@@ -76,14 +67,6 @@
       type = "gem";
     };
     version = "0.11.0";
-  };
-  eventmachine = {
-    source = {
-      remotes = ["https://rubygems.org"];
-      sha256 = "075hdw0fgzldgss3xaqm2dk545736khcvv1fmzbf1sgdlkyh1v8z";
-      type = "gem";
-    };
-    version = "1.2.5";
   };
   execjs = {
     source = {
@@ -152,14 +135,6 @@
       type = "gem";
     };
     version = "2.7.1";
-  };
-  "http_parser.rb" = {
-    source = {
-      remotes = ["https://rubygems.org"];
-      sha256 = "15nidriy0v5yqfjsgsra51wmknxci2n2grliz78sf9pga3n0l7gi";
-      type = "gem";
-    };
-    version = "0.6.0";
   };
   i18n = {
     dependencies = ["concurrent-ruby"];

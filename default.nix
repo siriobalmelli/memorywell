@@ -7,12 +7,19 @@
 
   # deps
   system ? builtins.currentSystem,
-  nixpkgs ? import <nixpkgs> { inherit system; }
+  nixpkgs ? import (builtins.fetchGit {
+    url = "https://github.com/siriobalmelli-foss/nixpkgs.git";
+    ref = "sirio";
+    }) {}
 }:
 
-nixpkgs.stdenv.mkDerivation rec {
+with nixpkgs;
+
+stdenv.mkDerivation rec {
   name = "memorywell";
   version = "0.2.1";
+  outputs = [ "out" ];
+
   meta = with nixpkgs.stdenv.lib; {
     description = "nonblocking circular buffer";
     homepage = https://siriobalmelli.github.io/memorywell/;
@@ -21,26 +28,33 @@ nixpkgs.stdenv.mkDerivation rec {
     maintainers = [ "https://github.com/siriobalmelli" ];
   };
 
-  outputs = [ "out" ];
+  nonlibc = nixpkgs.nonlibc or import (builtins.fetchGit {
+    url = "https://github.com/siriobalmelli/nonlibc.git";
+    ref = "master";
+    }) {};
 
-  nonlibc = nixpkgs.nonlibc or import ./nonlibc {};
-  buildInputs = [
-    nonlibc
-
-    nixpkgs.clang
+  inputs = [
     nixpkgs.gcc
+    nixpkgs.clang
     nixpkgs.meson
     nixpkgs.ninja
     nixpkgs.pandoc
     nixpkgs.pkgconfig
-    nixpkgs.dpkg
-    nixpkgs.fpm
-    nixpkgs.rpm
-    nixpkgs.zip
+  ];
+  buildInputs = if ! lib.inNixShell then inputs else inputs ++ [
+    nixpkgs.cscope
+    nixpkgs.gdb
+    nixpkgs.man
+    nixpkgs.valgrind
+    nixpkgs.which
+  ];
+  propagatedBuildInputs = [
+    nonlibc
   ];
 
+
   # just work with the current directory (aka: Git repo), no fancy tarness
-  src = ./.;
+  src = nixpkgs.nix-gitignore.gitignoreSource [] ./.;
 
   # Override the setupHook in the meson nix derivation,
   # so that meson doesn't automatically get invoked from there.
@@ -64,27 +78,11 @@ nixpkgs.stdenv.mkDerivation rec {
   buildPhase = ''
       ninja
   '';
-  doCheck = false;
+  doCheck = true;
+  checkPhase = ''
+      ninja test
+  '';
   installPhase = ''
       ninja install
-  '';
-
-  # Build packages outside $out then move them in: fpm seems to ignore
-  #+	the '-x' flag that we need to avoid packaging packages inside packages
-  postFixup = ''
-      mkdir temp
-      for pk in "deb" "rpm" "tar" "zip"; do
-          if ! fpm -f -t $pk -s dir -p temp/ -n $name -v $version \
-              --description "${meta.description}" \
-              --license "${meta.license.spdxId}" \
-              --url "${meta.homepage}" \
-              --maintainer "${builtins.head meta.maintainers}" \
-              "$out/=/"
-          then
-              echo "ERROR (non-fatal): could not build $pk package" >&2
-          fi
-      done
-      mkdir -p $out/var/cache/packages
-      mv -fv temp/* $out/var/cache/packages/
   '';
 }

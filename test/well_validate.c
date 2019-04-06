@@ -1,5 +1,5 @@
 #include <well.h>
-#include <zed_dbg.h>
+#include <ndebug.h>
 #include <stdlib.h>
 
 
@@ -18,18 +18,18 @@ int test_zero(struct well *buf)
 		
 	/* single */
 	res = well_reserve(&buf->tx, 0);
-	Z_err_if(res.cnt, "reserve 0 returned %zu", res.cnt);
+	NB_err_if(res.cnt, "reserve 0 returned %zu", res.cnt);
 	well_release_single(&buf->rx, 0);
-	Z_err_if(memcmp(&state, buf, sizeof(state)), "nop must not alter state");
+	NB_err_if(memcmp(&state, buf, sizeof(state)), "nop must not alter state");
 
 	/* multi */
 	res = well_reserve(&buf->rx, 0);
-	Z_err_if(res.cnt, "reserve 0 returned %zu", res.cnt);
+	NB_err_if(res.cnt, "reserve 0 returned %zu", res.cnt);
 	size_t ret;
 	ret = well_release_multi(&buf->tx, res);
-	Z_err_if(ret, "release 0 returned %zu", ret);
+	NB_err_if(ret, "release 0 returned %zu", ret);
 
-	Z_err_if(memcmp(&state, buf, sizeof(state)), "nop must not alter state");
+	NB_err_if(memcmp(&state, buf, sizeof(state)), "nop must not alter state");
 
 	return err_cnt;
 }
@@ -43,23 +43,23 @@ int main()
 	struct well buf = { {0} };
 
 	/* init buffer */
-	Z_die_if(well_params(42, 10, &buf), "");
-	Z_err_if(well_blk_size(&buf) != 64,
+	NB_die_if(well_params(42, 10, &buf), "");
+	NB_err_if(well_blk_size(&buf) != 64,
 		"blk_size %zu is not next power of 2 above 42",
 		well_blk_size(&buf));
-	Z_err_if(well_blk_count(&buf) != 16,
+	NB_err_if(well_blk_count(&buf) != 16,
 		"blk_count %zu is not next power of 2 above 10",
 		well_blk_count(&buf));
 
 	/* allocate memory */
-	Z_die_if(
+	NB_die_if(
 		well_init(&buf, malloc(well_size(&buf)))
 		, "size %zu", well_size(&buf));
 
 	/* run tests */
 	err_cnt += test_zero(&buf);
 
-out:
+die:
 	well_deinit(&buf);
 	free(well_mem(&buf));
 	return err_cnt;

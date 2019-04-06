@@ -10,7 +10,7 @@ Runs for a fixed time and then reports number of blocks pushed/pulled
 #include <well.h>
 #include <well_fail.h>
 
-#include <zed_dbg.h>
+#include <ndebug.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <getopt.h>
@@ -189,68 +189,68 @@ int main(int argc, char **argv)
 		{
 			case 's':
 				opt = sscanf(optarg, "%u", &secs);
-				Z_die_if(opt != 1, "invalid secs '%s'", optarg);
+				NB_die_if(opt != 1, "invalid secs '%s'", optarg);
 				break;
 
 			case 'c':
 				opt = sscanf(optarg, "%zu", &blk_cnt);
-				Z_die_if(opt != 1, "invalid blk_cnt '%s'", optarg);
-				Z_die_if(blk_cnt < 2,
+				NB_die_if(opt != 1, "invalid blk_cnt '%s'", optarg);
+				NB_die_if(blk_cnt < 2,
 					"blk_cnt %zu impossible", blk_cnt);
 				break;
 
 			case 'r':
 				opt = sscanf(optarg, "%zu", &reservation);
-				Z_die_if(opt != 1, "invalid reservation '%s'", optarg);
-				Z_die_if(!reservation || reservation > blk_cnt,
+				NB_die_if(opt != 1, "invalid reservation '%s'", optarg);
+				NB_die_if(!reservation || reservation > blk_cnt,
 					"reservation %zu; blk_cnt %zu", reservation, blk_cnt);
 				break;
 
 			case 't':
 				opt = sscanf(optarg, "%zu", &tx_thread_cnt);
-				Z_die_if(opt != 1, "invalid tx_thread_cnt '%s'", optarg);
+				NB_die_if(opt != 1, "invalid tx_thread_cnt '%s'", optarg);
 				break;
 
 			case 'x':
 				opt = sscanf(optarg, "%zu", &rx_thread_cnt);
-				Z_die_if(opt != 1, "invalid rx_thread_cnt '%s'", optarg);
+				NB_die_if(opt != 1, "invalid rx_thread_cnt '%s'", optarg);
 				break;
 
 			case 'h':
 				usage(argv[0]);
-				goto out;
+				goto die;
 
 			default:
 				usage(argv[0]);
-				Z_die("option '%c' invalid", opt);
+				NB_die("option '%c' invalid", opt);
 		}
 	}
 	/* sanity check reservation sizes */
-	Z_die_if(reservation > blk_cnt,
+	NB_die_if(reservation > blk_cnt,
 		"would attempt to reserve %zu from buffer with %zu blocks",
 		reservation, blk_cnt);
 
 
 	/* create buffer */
 	struct well buf = { {0} };
-	Z_die_if(
+	NB_die_if(
 		well_params(blk_size, blk_cnt, &buf)
 		, "");
-	Z_die_if(
+	NB_die_if(
 		well_init(&buf, malloc(well_size(&buf)))
 		, "size %zu", well_size(&buf));
 
 	void *(*tx_t)(void *) = tx_single;
 	if (tx_thread_cnt > 1)
 		tx_t = tx_multi;
-	Z_die_if(!(
+	NB_die_if(!(
 		tx = malloc(sizeof(pthread_t) * tx_thread_cnt)
 		), "");
 
 	void *(*rx_t)(void *) = rx_single;
 	if (rx_thread_cnt > 1)
 		rx_t = rx_multi;
-	Z_die_if(!(
+	NB_die_if(!(
 		rx = malloc(sizeof(pthread_t) * rx_thread_cnt)
 		), "");
 
@@ -292,7 +292,7 @@ int main(int argc, char **argv)
 	printf("cpu time %.4lfs; wall time %.4lfs\n",
 		nlc_timing_cpu(t), nlc_timing_wall(t));
 
-out:
+die:
 	well_deinit(&buf);
 	free(well_mem(&buf));
 	free(tx);
