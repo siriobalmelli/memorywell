@@ -1,8 +1,14 @@
-with import <nixpkgs> { };
+{
+  nixpkgs ? import (builtins.fetchGit {
+    url = "https://github.com/siriobalmelli-foss/nixpkgs.git";
+    ref = "master";
+    }) {}
+  }:
+
+with nixpkgs;
 
 let jekyll_env = bundlerEnv rec {
     name = "jekyll_env";
-    ruby = ruby_2_5;
     gemfile = ./Gemfile;
     lockfile = ./Gemfile.lock;
     gemset = ./gemset.nix;
