@@ -1,10 +1,10 @@
-build-*
-.*.sw[op]
 *.pyc
-cscope*
-toolchain/ninja*
-_site
+.*.sw[op]
 .DS_Store
+.bundle
+_site
+build-*
+cscope*
 result*
 subprojects*
-.bundle
+toolchain/ninja*
