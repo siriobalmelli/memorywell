@@ -8,9 +8,9 @@
   # deps
   system ? builtins.currentSystem,
   nixpkgs ? import (builtins.fetchGit {
-    url = "https://github.com/siriobalmelli-foss/nixpkgs.git";
-    ref = "master";
-    }) {}
+    url = "https://siriobalmelli@github.com/siriobalmelli-foss/nixpkgs.git";
+    ref = "refs/tags/sirio-2022-08-24";
+    }) { }
 }:
 
 with nixpkgs;
@@ -20,7 +20,7 @@ stdenv.mkDerivation rec {
   version = "0.2.1";
   outputs = [ "out" ];
 
-  meta = with nixpkgs.stdenv.lib; {
+  meta = with nixpkgs.lib; {
     description = "nonblocking circular buffer";
     homepage = https://siriobalmelli.github.io/memorywell/;
     license = licenses.lgpl21Plus;
