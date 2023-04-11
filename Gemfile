@@ -1,5 +1,5 @@
 source 'https://rubygems.org'
-gem "nokogiri", "~> 1.10.10"
+gem "nokogiri", "~> 1.14.3"
 gem 'jekyll'
 
 group :jekyll_plugins do
